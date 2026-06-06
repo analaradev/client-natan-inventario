@@ -155,91 +155,7 @@ class SubInventarioController extends Controller
         // Obtener libros paginados (15 por página)
         $libros = $subinventario->libros()->paginate(15);
         
-        // Obtener usuarios asignados a este subinventario
-        $usuariosAsignados = DB::table('subinventario_user')
-            ->where('subinventario_id', $subinventario->id)
-            ->orderBy('created_at', 'desc')
-            ->get();
-        
-        return view('subinventarios.show', compact('subinventario', 'libros', 'usuariosAsignados'));
-    }
-
-    /**
-     * Mostrar vista para gestionar usuarios del subinventario
-     */
-    public function usuarios(SubInventario $subinventario)
-    {
-        $usuariosAsignados = DB::table('subinventario_user')
-            ->where('subinventario_id', $subinventario->id)
-            ->orderBy('created_at', 'desc')
-            ->get();
-        
-        return view('subinventarios.usuarios', compact('subinventario', 'usuariosAsignados'));
-    }
-
-    /**
-     * Asignar congregante al subinventario
-     */
-    public function assignUser(Request $request, SubInventario $subinventario)
-    {
-        $validated = $request->validate([
-            'cod_congregante' => 'required|string|max:50',
-            'nombre_congregante' => 'required|string|max:255',
-        ]);
-
-        try {
-            // Verificar si el congregante ya está asignado
-            $existe = DB::table('subinventario_user')
-                ->where('subinventario_id', $subinventario->id)
-                ->where('cod_congregante', $validated['cod_congregante'])
-                ->exists();
-
-            if ($existe) {
-                return redirect()->route('subinventarios.usuarios', $subinventario)
-                    ->with('error', 'Este congregante ya está asignado a este subinventario');
-            }
-
-            DB::table('subinventario_user')->insert([
-                'subinventario_id' => $subinventario->id,
-                'cod_congregante' => $validated['cod_congregante'],
-                'nombre_congregante' => $validated['nombre_congregante'],
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-
-            return redirect()->route('subinventarios.usuarios', $subinventario)
-                ->with('success', 'Congregante asignado correctamente');
-        } catch (\Exception $e) {
-            Log::error('Error al asignar congregante a subinventario', [
-                'error' => $e->getMessage(),
-                'subinventario_id' => $subinventario->id
-            ]);
-            return redirect()->route('subinventarios.usuarios', $subinventario)
-                ->with('error', 'Error al asignar el congregante: ' . $e->getMessage());
-        }
-    }
-
-    /**
-     * Remover congregante del subinventario
-     */
-    public function removeUser(Request $request, SubInventario $subinventario)
-    {
-        $validated = $request->validate([
-            'cod_congregante' => 'required|string|max:50',
-        ]);
-
-        $deleted = DB::table('subinventario_user')
-            ->where('subinventario_id', $subinventario->id)
-            ->where('cod_congregante', $validated['cod_congregante'])
-            ->delete();
-
-        if ($deleted) {
-            return redirect()->route('subinventarios.usuarios', $subinventario)
-                ->with('success', 'Congregante removido correctamente');
-        }
-
-        return redirect()->route('subinventarios.usuarios', $subinventario)
-            ->with('error', 'No se pudo remover el congregante');
+        return view('subinventarios.show', compact('subinventario', 'libros'));
     }
 
     /**
@@ -579,7 +495,9 @@ class SubInventarioController extends Controller
             $inventarioGeneral = [
                 'tipo' => 'general',
                 'nombre' => 'Inventario General',
-                'descripcion' => 'Inventario principal'
+                'descripcion' => 'Inventario principal',
+                'total_libros' => $totalLibrosGeneral,
+                'total_unidades' => $totalUnidadesGeneral
             ];
 
             return response()->json([
@@ -592,22 +510,8 @@ class SubInventarioController extends Controller
             ], 200);
         }
 
-        // Vendedores: Solo sus subinventarios asignados
-        $subinventariosIds = DB::table('subinventario_user')
-            ->where('cod_congregante', $codCongregante)
-            ->pluck('subinventario_id');
-        
-        if ($subinventariosIds->isEmpty()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'No tienes subinventarios asignados',
-                'data' => []
-            ], 404);
-        }
-        
-        // Obtener los subinventarios SIN cargar los libros (más rápido)
-        $subinventarios = SubInventario::whereIn('id', $subinventariosIds)
-            ->where('estado', 'activo')
+        // Vendedores: Todos los subinventarios activos (sin inventario general)
+        $subinventarios = SubInventario::where('estado', 'activo')
             ->get(['id', 'descripcion', 'fecha_subinventario', 'estado', 'observaciones'])
             ->map(function($subinventario) {
                 $stats = DB::table('subinventario_libro')
@@ -703,28 +607,7 @@ class SubInventarioController extends Controller
             ], 404);
         }
         
-        // Admin Librería y Supervisor tienen acceso a TODOS los subinventarios
-        if (!$esAdmin) {
-            // Vendedores: Validar que tengan acceso al subinventario específico
-            if ($request->filled('cod_congregante')) {
-                $tieneAcceso = DB::table('subinventario_user')
-                    ->where('subinventario_id', $id)
-                    ->where('cod_congregante', $request->cod_congregante)
-                    ->exists();
-                
-                if (!$tieneAcceso) {
-                    \Log::warning('Vendedor sin acceso al subinventario', [
-                        'cod_congregante' => $request->cod_congregante,
-                        'subinventario_id' => $id
-                    ]);
-                    
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'No tienes acceso a este subinventario. Contacta al administrador.'
-                    ], 403);
-                }
-            }
-        }
+
         
         // Obtener libros con stock disponible
         $libros = $subinventario->libros()
@@ -759,30 +642,20 @@ class SubInventarioController extends Controller
     }
 
     /**
-     * API - Obtener todos los libros disponibles para vender de un vendedor
-     * Incluye libros de todos sus subinventarios activos con filtros y búsqueda
+     * API - Obtener todos los libros disponibles para vender
+     * Incluye libros de todos los subinventarios activos con filtros y búsqueda
      */
     public function apiMisLibrosDisponibles(Request $request, $codCongregante)
     {
-        // 1. Obtener IDs de subinventarios del vendedor
-        if ($this->hasAdminAccess($request)) {
-            $subinventariosIds = SubInventario::where('estado', 'activo')->pluck('id');
-        } else {
-            $subinventariosIds = DB::table('subinventario_user')
-                ->where('cod_congregante', $codCongregante)
-                ->pluck('subinventario_id');
-        }
+        // 1. Obtener IDs de todos los subinventarios activos (para todos los usuarios)
+        $subinventariosIds = SubInventario::where('estado', 'activo')->pluck('id');
 
         if ($subinventariosIds->isEmpty()) {
-            $status = $this->hasAdminAccess($request) ? 200 : 404;
-
             return response()->json([
-                'success' => $status === 200,
-                'message' => $status === 200
-                    ? 'No hay subinventarios activos para consultar.'
-                    : 'No tienes subinventarios asignados. No puedes vender libros.',
+                'success' => true,
+                'message' => 'No hay subinventarios activos para consultar.',
                 'data' => []
-            ], $status);
+            ], 200);
         }
 
         // 2. Construir query base - libros en subinventarios activos del vendedor
@@ -1001,27 +874,43 @@ class SubInventarioController extends Controller
                 $rolNombre = strtoupper(trim((string) $rol));
             }
 
-            // Verificar por nombre de rol
-            if (
-                $rolNombre === 'ADMIN LIBRERIA' ||
-                $rolNombre === 'ADMIN LIBRERÍA' ||
-                $rolNombre === 'SUPERVISOR'
-            ) {
+            $rolNombre = $this->normalizeRoleName($rolNombre);
+
+            // Admin Librería (19) y Supervisor (20) tienen acceso total.
+            if ($rolNombre === 'ADMIN LIBRERIA' || $rolNombre === 'SUPERVISOR') {
                 return true;
             }
 
-            // Verificar por ID (Admin Librería = 20, Supervisor = 19)
+            // Verificar por ID (Admin Librería = 19, Supervisor = 20)
             if (
-                (string) $rolId === '20' ||
                 (string) $rolId === '19' ||
-                $rolNombre === '20' ||
-                $rolNombre === '19'
+                (string) $rolId === '20' ||
+                $rolNombre === '19' ||
+                $rolNombre === '20'
             ) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    private function normalizeRoleName(string $roleName): string
+    {
+        $roleName = strtoupper(trim($roleName));
+
+        return strtr($roleName, [
+            'Á' => 'A',
+            'É' => 'E',
+            'Í' => 'I',
+            'Ó' => 'O',
+            'Ú' => 'U',
+            'á' => 'A',
+            'é' => 'E',
+            'í' => 'I',
+            'ó' => 'O',
+            'ú' => 'U',
+        ]);
     }
 
     /**
@@ -1357,26 +1246,7 @@ class SubInventarioController extends Controller
             'per_page' => 'nullable|integer|min:1|max:100'
         ]);
 
-        // Si se proporciona cod_congregante, validar que el subinventario le pertenezca
-        // EXCEPTO si es Admin Librería o Supervisor (tienen acceso a todo)
-        if ($request->filled('cod_congregante') && $request->filled('subinventario_id')) {
-            $esAdmin = $this->hasAdminAccess($request);
-            
-            if (!$esAdmin) {
-                $tieneAcceso = DB::table('subinventario_user')
-                    ->where('cod_congregante', $validated['cod_congregante'])
-                    ->where('subinventario_id', $validated['subinventario_id'])
-                    ->exists();
-                
-                if (!$tieneAcceso) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'El subinventario seleccionado no está asignado a este usuario',
-                        'error' => 'unauthorized_subinventario'
-                    ], 403);
-                }
-            }
-        }
+        
 
         // Query base para obtener todos los libros
         $query = Libro::query();
@@ -1753,4 +1623,3 @@ class SubInventarioController extends Controller
         exit;
     }
 }
-

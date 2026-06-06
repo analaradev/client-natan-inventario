@@ -121,13 +121,31 @@
     const libros = @json($libros);
     const subinventarioLibros = @json($subinventario->libros);
 
+    function normalizarTexto(texto) {
+        return String(texto || '')
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '');
+    }
+
+    function escaparHtml(texto) {
+        const div = document.createElement('div');
+        div.textContent = texto || '';
+        return div.innerHTML;
+    }
+
+    function escaparParametro(texto) {
+        return String(texto || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    }
+
     function agregarLibro(libroId = '', cantidad = 1) {
         const container = document.getElementById('librosContainer');
         const emptyMessage = document.getElementById('emptyMessage');
+        const currentIndex = libroIndex;
         
         const div = document.createElement('div');
         div.className = 'flex gap-3 items-start bg-gray-50 p-4 rounded-lg libro-item';
-        div.id = `libro-${libroIndex}`;
+        div.id = `libro-${currentIndex}`;
         
         // Encontrar el libro seleccionado si existe
         const libroSeleccionado = libroId ? libros.find(l => l.id == libroId) : null;
@@ -139,31 +157,31 @@
                     <label class="block text-sm font-medium text-gray-700 mb-1">Libro *</label>
                     <div class="relative">
                         <input type="hidden" 
-                               name="libros[${libroIndex}][libro_id]" 
-                               id="libro_id_${libroIndex}"
+                               name="libros[${currentIndex}][libro_id]" 
+                               id="libro_id_${currentIndex}"
                                value="${libroId}"
                                required>
                         <input type="text" 
-                               id="search_${libroIndex}"
+                               id="search_${currentIndex}"
                                placeholder="Busca un libro..." 
                                autocomplete="off"
                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2"
-                               value="${libroSeleccionado ? libroSeleccionado.nombre : ''}"
-                               data-index="${libroIndex}">
-                        <div id="dropdown_${libroIndex}" class="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto z-50" style="display: none;"></div>
+                               value="${libroSeleccionado ? escaparHtml(libroSeleccionado.nombre) : ''}"
+                               data-index="${currentIndex}">
+                        <div id="dropdown_${currentIndex}" class="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto z-50" style="display: none;"></div>
                     </div>
                 </div>
                 
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Cantidad *</label>
                     <input type="number" 
-                           name="libros[${libroIndex}][cantidad]" 
+                           name="libros[${currentIndex}][cantidad]" 
                            min="0" 
                            value="${cantidad}"
                            max="${stockDisponible}"
                            required
                            class="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                    <p id="stock-info-${libroIndex}" class="mt-1 text-xs text-gray-500">${libroSeleccionado ? 'Stock disponible: ' + stockDisponible : ''}</p>
+                    <p id="stock-info-${currentIndex}" class="mt-1 text-xs text-gray-500">${libroSeleccionado ? 'Stock disponible: ' + stockDisponible : ''}</p>
                 </div>
             </div>
         `;
@@ -172,11 +190,11 @@
         emptyMessage.style.display = 'none';
         
         // Agregar event listeners para búsqueda
-        const searchInput = div.querySelector(`#search_${libroIndex}`);
-        const dropdown = div.querySelector(`#dropdown_${libroIndex}`);
+        const searchInput = div.querySelector(`#search_${currentIndex}`);
+        const dropdown = div.querySelector(`#dropdown_${currentIndex}`);
         
-        searchInput.addEventListener('input', () => filtrarLibros(libroIndex));
-        searchInput.addEventListener('focus', () => filtrarLibros(libroIndex));
+        searchInput.addEventListener('input', () => filtrarLibros(currentIndex));
+        searchInput.addEventListener('focus', () => filtrarLibros(currentIndex));
         
         document.addEventListener('click', (e) => {
             if (!div.contains(e.target)) {
@@ -191,7 +209,8 @@
     function filtrarLibros(index) {
         const searchInput = document.getElementById(`search_${index}`);
         const dropdown = document.getElementById(`dropdown_${index}`);
-        const valor = searchInput.value.toLowerCase();
+        const valor = normalizarTexto(searchInput.value);
+        const libroIdInput = document.getElementById(`libro_id_${index}`);
         
         // Obtener libros ya seleccionados
         const librosSeleccionados = Array.from(document.querySelectorAll('input[id^="libro_id_"]'))
@@ -200,22 +219,37 @@
         
         // Filtrar libros
         const librosFiltrados = libros
-            .filter(l => !librosSeleccionados.includes(l.id.toString()) || document.getElementById(`libro_id_${index}`).value == l.id)
-            .filter(l => l.nombre.toLowerCase().includes(valor))
+            .filter(l => !librosSeleccionados.includes(l.id.toString()) || libroIdInput.value == l.id)
+            .filter(l => {
+                const nombre = normalizarTexto(l.nombre);
+                const codigo = normalizarTexto(l.codigo_barras);
+                return nombre.includes(valor) || codigo.includes(valor);
+            })
             .slice(0, 15); // Limitar a 15 resultados
         
         // Mostrar dropdown
-        if (librosFiltrados.length > 0 && valor.length > 0 || searchInput === document.activeElement) {
-            dropdown.innerHTML = librosFiltrados.map(libro => `
+        if (librosFiltrados.length > 0 && (valor.length > 0 || searchInput === document.activeElement)) {
+            dropdown.innerHTML = librosFiltrados.map(libro => {
+                const stock = libro.stock_disponible_edicion || libro.stock;
+                return `
                 <div class="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b" 
                      data-libro-id="${libro.id}" 
-                     data-libro-nombre="${libro.nombre}"
-                     data-stock="${libro.stock_disponible_edicion || libro.stock}"
-                     onclick="seleccionarLibro(${index}, ${libro.id}, '${libro.nombre.replace(/'/g, "\\'")}', ${libro.stock_disponible_edicion || libro.stock})">
-                    <div class="font-medium text-gray-900">${libro.nombre}</div>
-                    <div class="text-xs text-gray-500">Stock: ${libro.stock_disponible_edicion || libro.stock}</div>
+                     data-libro-nombre="${escaparHtml(libro.nombre)}"
+                     data-stock="${stock}"
+                     onclick="seleccionarLibro(${index}, ${libro.id}, '${escaparParametro(libro.nombre)}', ${stock})">
+                    <div class="font-medium text-gray-900">${escaparHtml(libro.nombre)}</div>
+                    <div class="text-xs text-gray-500">
+                        ${libro.codigo_barras ? 'Código: ' + escaparHtml(libro.codigo_barras) + ' · ' : ''}Stock: ${stock}
+                    </div>
                 </div>
-            `).join('');
+            `}).join('');
+            dropdown.style.display = 'block';
+        } else if (valor.length > 0 && searchInput === document.activeElement) {
+            dropdown.innerHTML = `
+                <div class="px-3 py-3 text-sm text-gray-500 text-center">
+                    No se encontraron coincidencias
+                </div>
+            `;
             dropdown.style.display = 'block';
         } else {
             dropdown.style.display = 'none';
@@ -242,10 +276,11 @@
     function agregarLibroAlInicio(libroId = '', cantidad = 1) {
         const container = document.getElementById('librosContainer');
         const emptyMessage = document.getElementById('emptyMessage');
+        const currentIndex = libroIndex;
         
         const div = document.createElement('div');
         div.className = 'flex gap-3 items-start bg-gray-50 p-4 rounded-lg libro-item';
-        div.id = `libro-${libroIndex}`;
+        div.id = `libro-${currentIndex}`;
         
         // Encontrar el libro seleccionado si existe
         const libroSeleccionado = libroId ? libros.find(l => l.id == libroId) : null;
@@ -257,31 +292,31 @@
                     <label class="block text-sm font-medium text-gray-700 mb-1">Libro *</label>
                     <div class="relative">
                         <input type="hidden" 
-                               name="libros[${libroIndex}][libro_id]" 
-                               id="libro_id_${libroIndex}"
+                               name="libros[${currentIndex}][libro_id]" 
+                               id="libro_id_${currentIndex}"
                                value="${libroId}"
                                required>
                         <input type="text" 
-                               id="search_${libroIndex}"
+                               id="search_${currentIndex}"
                                placeholder="Busca un libro..." 
                                autocomplete="off"
                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2"
-                               value="${libroSeleccionado ? libroSeleccionado.nombre : ''}"
-                               data-index="${libroIndex}">
-                        <div id="dropdown_${libroIndex}" class="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto z-50" style="display: none;"></div>
+                               value="${libroSeleccionado ? escaparHtml(libroSeleccionado.nombre) : ''}"
+                               data-index="${currentIndex}">
+                        <div id="dropdown_${currentIndex}" class="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto z-50" style="display: none;"></div>
                     </div>
                 </div>
                 
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Cantidad *</label>
                     <input type="number" 
-                           name="libros[${libroIndex}][cantidad]" 
+                           name="libros[${currentIndex}][cantidad]" 
                            min="0" 
                            value="${cantidad}"
                            max="${stockDisponible}"
                            required
                            class="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                    <p id="stock-info-${libroIndex}" class="mt-1 text-xs text-gray-500">${libroSeleccionado ? 'Stock disponible: ' + stockDisponible : ''}</p>
+                    <p id="stock-info-${currentIndex}" class="mt-1 text-xs text-gray-500">${libroSeleccionado ? 'Stock disponible: ' + stockDisponible : ''}</p>
                 </div>
             </div>
         `;
@@ -296,11 +331,11 @@
         emptyMessage.style.display = 'none';
         
         // Agregar event listeners para búsqueda
-        const searchInput = div.querySelector(`#search_${libroIndex}`);
-        const dropdown = div.querySelector(`#dropdown_${libroIndex}`);
+        const searchInput = div.querySelector(`#search_${currentIndex}`);
+        const dropdown = div.querySelector(`#dropdown_${currentIndex}`);
         
-        searchInput.addEventListener('input', () => filtrarLibros(libroIndex));
-        searchInput.addEventListener('focus', () => filtrarLibros(libroIndex));
+        searchInput.addEventListener('input', () => filtrarLibros(currentIndex));
+        searchInput.addEventListener('focus', () => filtrarLibros(currentIndex));
         
         document.addEventListener('click', (e) => {
             if (!div.contains(e.target)) {

@@ -174,79 +174,6 @@
         @endif
     </x-card>
 
-    <!-- Usuarios Asignados -->
-    <x-card class="bg-blue-50 border-2 border-blue-300 shadow-lg">
-        <div class="mb-4 flex justify-between items-center">
-            <div>
-                <h3 class="text-lg font-semibold text-blue-900 flex items-center">
-                    <i class="fas fa-users mr-2"></i>Usuarios Asignados ({{ $usuariosAsignados->count() }})
-                </h3>
-                <p class="text-sm text-blue-700 mt-1">
-                    Usuarios con acceso a este sub-inventario
-                </p>
-            </div>
-            <a href="{{ route('subinventarios.usuarios', $subinventario) }}" 
-               style="background-color: #a855f7 !important; color: #ffffff !important; padding: 0.5rem 1rem !important; border-radius: 0.5rem !important; font-size: 0.875rem !important; display: inline-block !important; text-decoration: none !important; font-weight: 500 !important; border: none !important;"
-               onmouseover="this.style.backgroundColor='#7e22ce'"
-               onmouseout="this.style.backgroundColor='#a855f7'">
-                <i class="fas fa-users-cog mr-2"></i>Gestionar Usuarios
-            </a>
-        </div>
-
-        @if($usuariosAsignados && $usuariosAsignados->count() > 0)
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-blue-300 border-2 border-blue-200">
-                    <thead class="bg-blue-100">
-                        <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-blue-900 uppercase">Usuario</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-blue-900 uppercase">Fecha Asignación</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-blue-900 uppercase">Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white divide-y divide-blue-200">
-                        @foreach($usuariosAsignados as $usuario)
-                            <tr class="hover:bg-blue-100">
-                                <td class="px-6 py-4">
-                                    <div class="flex items-center">
-                                        <div class="h-8 w-8 rounded-full bg-purple-500 flex items-center justify-center mr-3">
-                                            <i class="fas fa-user text-white"></i>
-                                        </div>
-                                        <div>
-                                            <div class="text-sm font-medium text-gray-900">{{ $usuario->nombre_congregante }}</div>
-                                            <div class="text-xs text-gray-500">Código: {{ $usuario->cod_congregante }}</div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td class="px-6 py-4 text-sm text-gray-700">
-                                    {{ \Carbon\Carbon::parse($usuario->created_at)->format('d/m/Y H:i') }}
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                    <form action="{{ route('subinventarios.remove-user', $subinventario) }}" 
-                                          method="POST" 
-                                          class="inline"
-                                          onsubmit="return confirm('¿Eliminar asignación de {{ $usuario->nombre_congregante }}?')">
-                                        @csrf
-                                        @method('DELETE')
-                                        <input type="hidden" name="cod_congregante" value="{{ $usuario->cod_congregante }}">
-                                        <button type="submit" class="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 shadow">
-                                            <i class="fas fa-trash mr-1"></i>Remover
-                                        </button>
-                                    </form>
-                                </td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            </div>
-        @else
-            <div class="text-center py-8 bg-white rounded-lg border-2 border-blue-200">
-                <i class="fas fa-users-slash text-blue-400 text-5xl mb-4"></i>
-                <p class="text-blue-700 text-lg font-medium">No hay usuarios asignados a este sub-inventario</p>
-                <p class="text-blue-600 text-sm mt-2">Haz clic en "Asignar Usuario" para agregar usuarios</p>
-            </div>
-        @endif
-    </x-card>
-
     <!-- Acciones -->
     @if($subinventario->estado === 'activo')
         <x-card title="Acciones" class="lg:w-1/2 lg:ml-auto">
@@ -254,14 +181,6 @@
                 <x-button variant="warning" icon="fas fa-edit" href="{{ route('subinventarios.edit', $subinventario) }}" class="w-full justify-center">
                     Editar
                 </x-button>
-
-                <a href="{{ route('subinventarios.usuarios', $subinventario) }}"
-                   style="background-color: #3b82f6 !important; color: #ffffff !important; padding: 0.5rem 1rem !important; border-radius: 0.5rem !important; display: flex !important; align-items: center !important; justify-content: center !important; width: 100% !important; text-decoration: none !important; font-weight: 500 !important; border: none !important;"
-                   onmouseover="this.style.backgroundColor='#2563eb'"
-                   onmouseout="this.style.backgroundColor='#3b82f6'">
-                    <i class="fas fa-users mr-2"></i>
-                    <span>Gestionar Usuarios</span>
-                </a>
 
                 <form action="{{ route('subinventarios.completar', $subinventario) }}" 
                       method="POST"
@@ -285,64 +204,8 @@
     @endif
 </x-page-layout>
 
-<!-- Modal para asignar usuario -->
-<div id="modalAsignar" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-    <div class="relative top-20 mx-auto p-5 border-4 border-purple-500 w-96 shadow-2xl rounded-md bg-gradient-to-br from-purple-50 to-blue-50">
-        <div class="mt-3">
-            <h3 class="text-lg font-medium text-purple-900 mb-4">
-                <i class="fas fa-user-plus mr-2 text-purple-600"></i>Asignar Usuario
-            </h3>
-            
-            <form action="{{ route('subinventarios.assign-user', $subinventario) }}" method="POST">
-                @csrf
-                
-                <div class="mb-4">
-                    <label class="block text-sm font-medium text-gray-900 mb-2">
-                        Nombre del Usuario *
-                    </label>
-                    <input type="text" 
-                           name="user_name" 
-                           required
-                           class="w-full rounded-lg border-2 border-purple-300 shadow-sm focus:border-purple-500 focus:ring-purple-500 px-4 py-2"
-                           placeholder="Nombre completo del congregante">
-                    <p class="text-xs text-gray-600 mt-1">
-                        <i class="fas fa-info-circle"></i> Ingresa el nombre completo del congregante que aparece en el sistema de usuarios
-                    </p>
-                </div>
-
-                <div class="flex justify-end gap-3">
-                    <button type="button" 
-                            onclick="cerrarModalAsignar()"
-                            class="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 border-2 border-gray-700 shadow">
-                        Cancelar
-                    </button>
-                    <button type="submit" 
-                            class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 border-2 border-purple-800 shadow">
-                        <i class="fas fa-check mr-2"></i>Asignar
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
 @push('scripts')
 <script>
-    function mostrarModalAsignar() {
-        document.getElementById('modalAsignar').classList.remove('hidden');
-    }
-
-    function cerrarModalAsignar() {
-        document.getElementById('modalAsignar').classList.add('hidden');
-    }
-
-    // Cerrar modal al hacer clic fuera
-    document.getElementById('modalAsignar').addEventListener('click', function(e) {
-        if (e.target === this) {
-            cerrarModalAsignar();
-        }
-    });
-
     function devolverLibro(libroId, libroNombre, cantidad) {
         if (confirm(`¿Devolver todo el stock de "${libroNombre}" (${cantidad} unidades) al inventario general? La cantidad se pondrá a 0.`)) {
             const form = document.createElement('form');

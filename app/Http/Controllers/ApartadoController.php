@@ -797,19 +797,6 @@ class ApartadoController extends Controller
                     ], 422);
                 }
 
-                // Validar acceso al subinventario
-                $tieneAcceso = DB::table('subinventario_user')
-                    ->where('subinventario_id', $validated['subinventario_id'])
-                    ->where('cod_congregante', $validated['cod_congregante'])
-                    ->exists();
-
-                if (!$tieneAcceso) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'No tienes acceso a este punto de venta (subinventario)'
-                    ], 403);
-                }
-
                 // Validar que el subinventario esté activo
                 $subinventario = \App\Models\SubInventario::find($validated['subinventario_id']);
                 if ($subinventario->estado !== 'activo') {
@@ -924,6 +911,7 @@ class ApartadoController extends Controller
                         ->where('subinventario_id', $validated['subinventario_id'])
                         ->where('libro_id', $libroData['libro_id'])
                         ->decrement('cantidad', $libroData['cantidad']);
+                    $libro->decrement('stock_subinventario', $libroData['cantidad']);
                 } else {
                     // Decrementar del stock general (ya se incrementó stock_apartado, así que el disponible se reduce automáticamente)
                     // No es necesario hacer nada más porque stock_disponible = stock - stock_apartado - stock_subinventario
@@ -982,4 +970,3 @@ class ApartadoController extends Controller
         }
     }
 }
-

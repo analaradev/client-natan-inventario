@@ -32,6 +32,9 @@ Route::prefix('v1')->group(function () {
     
     // Abonos Móvil - Buscar apartados
     Route::prefix('movil')->group(function () {
+        // Puntos de venta según rol: vendedor, admin librería o supervisor
+        Route::get('/puntos-venta', [VentaController::class, 'apiPuntosVenta']);
+
         // Subinventarios para usuarios normales y admin/supervisor
         Route::get('/subinventarios/mis-subinventarios/{cod_congregante}', [SubInventarioController::class, 'apiMisSubinventarios']);
         

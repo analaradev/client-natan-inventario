@@ -18,15 +18,10 @@ class AuthHelper
         }
         
         foreach ($roles as $rol) {
-            $rolNombre = strtoupper(trim($rol['ROL'] ?? $rol['rol'] ?? ''));
+            $rolNombre = self::normalizeRoleName($rol['ROL'] ?? $rol['rol'] ?? '');
             $rolId = $rol['ID'] ?? $rol['id'] ?? $rol['ROL_ID'] ?? $rol['rol_id'] ?? null;
 
-            if (
-                $rolNombre === 'ADMIN LIBRERIA' ||
-                $rolNombre === 'ADMIN LIBRERÍA' ||
-                $rolNombre === 'SUPERVISOR' ||
-                (string) $rolId === '20'
-            ) {
+            if (self::hasFullInventoryRole($rolNombre, $rolId)) {
                 return true;
             }
         }
@@ -49,13 +44,12 @@ class AuthHelper
         }
         
         foreach ($roles as $rol) {
-            $rolNombre = strtoupper(trim($rol['ROL'] ?? $rol['rol'] ?? ''));
+            $rolNombre = self::normalizeRoleName($rol['ROL'] ?? $rol['rol'] ?? '');
             $rolId = $rol['ID'] ?? $rol['id'] ?? $rol['ROL_ID'] ?? $rol['rol_id'] ?? null;
 
             if (
                 $rolNombre === 'ADMIN LIBRERIA' ||
-                $rolNombre === 'ADMIN LIBRERÍA' ||
-                (string) $rolId === '20'
+                (string) $rolId === '19'
             ) {
                 return true;
             }
@@ -79,27 +73,40 @@ class AuthHelper
         }
         
         foreach ($roles as $rol) {
-            $rolNombre = strtoupper(trim($rol['ROL'] ?? $rol['rol'] ?? ''));
+            $rolNombre = self::normalizeRoleName($rol['ROL'] ?? $rol['rol'] ?? '');
             $rolId = $rol['ID'] ?? $rol['id'] ?? $rol['ROL_ID'] ?? $rol['rol_id'] ?? null;
 
-            // Admin Librería
-            if (
-                $rolNombre === 'ADMIN LIBRERIA' ||
-                $rolNombre === 'ADMIN LIBRERÍA' ||
-                (string) $rolId === '20'
-            ) {
-                return true;
-            }
-
-            // Supervisor
-            if (
-                $rolNombre === 'SUPERVISOR' ||
-                (string) $rolId === '19'
-            ) {
+            if (self::hasFullInventoryRole($rolNombre, $rolId)) {
                 return true;
             }
         }
         
         return false;
+    }
+
+    private static function hasFullInventoryRole(string $roleName, $roleId): bool
+    {
+        return $roleName === 'ADMIN LIBRERIA' ||
+            $roleName === 'SUPERVISOR' ||
+            (string) $roleId === '19' ||
+            (string) $roleId === '20';
+    }
+
+    private static function normalizeRoleName(string $roleName): string
+    {
+        $roleName = strtoupper(trim($roleName));
+
+        return strtr($roleName, [
+            'Á' => 'A',
+            'É' => 'E',
+            'Í' => 'I',
+            'Ó' => 'O',
+            'Ú' => 'U',
+            'á' => 'A',
+            'é' => 'E',
+            'í' => 'I',
+            'ó' => 'O',
+            'ú' => 'U',
+        ]);
     }
 }

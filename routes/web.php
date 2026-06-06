@@ -192,10 +192,7 @@ Route::middleware('checkauth')->group(function () {
     Route::get('/subinventarios/{subinventario}/libros-export/excel', [SubInventarioController::class, 'exportLibrosExcel'])->name('subinventarios.libros.export.excel');
     Route::get('/subinventarios/{subinventario}/libros-export/pdf', [SubInventarioController::class, 'exportLibrosPdf'])->name('subinventarios.libros.export.pdf');
     
-    // Rutas para gestionar usuarios de subinventarios - Disponibles para todos
-    Route::get('/subinventarios/{subinventario}/usuarios', [SubInventarioController::class, 'usuarios'])->name('subinventarios.usuarios');
-    Route::post('/subinventarios/{subinventario}/assign-user', [SubInventarioController::class, 'assignUser'])->name('subinventarios.assign-user');
-    Route::delete('/subinventarios/{subinventario}/remove-user', [SubInventarioController::class, 'removeUser'])->name('subinventarios.remove-user');
+
     
     // Apartados - Rutas de lectura disponibles para todos
     Route::get('/apartados', [ApartadoController::class, 'index'])->name('apartados.index');

@@ -273,21 +273,7 @@ class VentaController extends Controller
             $tipoInventario = $validated['tipo_inventario'];
             $subinventarioId = $validated['subinventario_id'] ?? null;
             
-            // VALIDACIÓN: Si es subinventario, verificar que el usuario tenga acceso
-            // Los admins tienen acceso a TODOS los subinventarios
-            if ($tipoInventario === 'subinventario' && $subinventarioId && !$this->isAdmin()) {
-                $tieneAcceso = DB::table('subinventario_user')
-                    ->where('subinventario_id', $subinventarioId)
-                    ->where('cod_congregante', session('codCongregante'))
-                    ->exists();
-                
-                if (!$tieneAcceso) {
-                    DB::rollBack();
-                    return back()->withErrors([
-                        'error' => 'No tienes acceso a este punto de venta (subinventario)'
-                    ])->withInput();
-                }
-            }
+            
             
             // Validar que si es a plazos, debe tener cliente
             if ($esAPLazos && empty($validated['cliente_id'])) {
@@ -1112,20 +1098,7 @@ class VentaController extends Controller
         ]);
         DB::beginTransaction();
         try {
-            // 1. VALIDAR ACCESO AL SUBINVENTARIO
-            $tieneAcceso = DB::table('subinventario_user')
-                ->where('subinventario_id', $validated['subinventario_id'])
-                ->where('cod_congregante', $validated['cod_congregante'])
-                ->exists();
-            
-            if (!$tieneAcceso) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'No tienes acceso a este punto de venta (subinventario)'
-                ], 403);
-            }
-
-            // 2. CARGAR SUBINVENTARIO Y VALIDAR ESTADO
+            // 1. CARGAR SUBINVENTARIO Y VALIDAR ESTADO
             $subinventario = \App\Models\SubInventario::with('libros')->findOrFail($validated['subinventario_id']);
             
             if ($subinventario->estado !== 'activo') {
@@ -1218,8 +1191,8 @@ class VentaController extends Controller
                     $subinventario->libros()->detach($item['libro_id']);
                 }
 
-                // Actualizar stock general del libro
-                $libro->decrement('stock', $item['cantidad']);
+                // El stock general ya se descontó al crear el subinventario.
+                // Al vender desde punto de venta solo sale del stock en subinventario.
                 $libro->decrement('stock_subinventario', $item['cantidad']);
             }
 
@@ -1280,6 +1253,63 @@ class VentaController extends Controller
     }
 
     /**
+     * API - Listar puntos de venta según rol
+     * Vendedor: todos los subinventarios activos (sin inventario general).
+     * Admin Librería y Supervisor: inventario general y todos los subinventarios.
+     */
+    public function apiPuntosVenta(Request $request)
+    {
+        $tieneAccesoTotal = $this->isAdmin() || $this->isAdminFromRequest($request);
+
+        \Log::info('[apiPuntosVenta] Request recibida', [
+            'cod_congregante' => $request->query('cod_congregante'),
+            'es_admin' => $tieneAccesoTotal,
+            'x_roles_header' => $request->header('X-Roles'),
+            'ip' => $request->ip(),
+        ]);
+
+        if ($tieneAccesoTotal) {
+            $inventarioGeneral = [
+                'tipo' => 'general',
+                'nombre' => 'Inventario General',
+                'descripcion' => 'Inventario principal',
+                'total_libros' => Libro::where('stock', '>', 0)->count(),
+                'total_unidades' => Libro::where('stock', '>', 0)->sum('stock')
+            ];
+
+            $subinventarios = SubInventario::where('estado', 'activo')
+                ->get(['id', 'descripcion', 'fecha_subinventario', 'estado', 'observaciones'])
+                ->map(function ($subinventario) {
+                    return $this->formatSubinventarioPuntoVenta($subinventario);
+                });
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'inventario_general' => $inventarioGeneral,
+                    'subinventarios' => $subinventarios,
+                    'total_subinventarios' => $subinventarios->count()
+                ]
+            ], 200);
+        }
+
+        $subinventarios = SubInventario::where('estado', 'activo')
+            ->get(['id', 'descripcion', 'fecha_subinventario', 'estado', 'observaciones'])
+            ->map(function ($subinventario) {
+                return $this->formatSubinventarioPuntoVenta($subinventario);
+            });
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Subinventarios encontrados',
+            'data' => [
+                'subinventarios' => $subinventarios,
+                'total_subinventarios' => $subinventarios->count()
+            ]
+        ], 200);
+    }
+
+    /**
      * API - Listar todos los puntos de venta (Admin Librería)
      * Devuelve inventario general y todos los subinventarios activos
      */
@@ -1295,7 +1325,9 @@ class VentaController extends Controller
         $inventarioGeneral = [
             'tipo' => 'general',
             'nombre' => 'Inventario General',
-            'descripcion' => 'Inventario principal'
+            'descripcion' => 'Inventario principal',
+            'total_libros' => Libro::where('stock', '>', 0)->count(),
+            'total_unidades' => Libro::where('stock', '>', 0)->sum('stock')
         ];
 
         $subinventarios = SubInventario::where('estado', 'activo')
@@ -1471,7 +1503,8 @@ class VentaController extends Controller
                         $subinventario->libros()->detach($item['libro_id']);
                     }
 
-                    $libro->decrement('stock', $item['cantidad']);
+                    // El stock general ya se descontó al crear el subinventario.
+                    // Al vender desde punto de venta solo sale del stock en subinventario.
                     $libro->decrement('stock_subinventario', $item['cantidad']);
                 } else {
                     $libro->decrement('stock', $item['cantidad']);
@@ -1540,15 +1573,10 @@ class VentaController extends Controller
         }
         
         foreach ($roles as $rol) {
-            $rolNombre = strtoupper(trim($rol['ROL'] ?? $rol['rol'] ?? ''));
+            $rolNombre = $this->normalizeRoleName($rol['ROL'] ?? $rol['rol'] ?? '');
             $rolId = $rol['ID'] ?? $rol['id'] ?? $rol['ROL_ID'] ?? $rol['rol_id'] ?? null;
 
-            if (
-                $rolNombre === 'ADMIN LIBRERIA' ||
-                $rolNombre === 'ADMIN LIBRERÍA' ||
-                $rolNombre === 'SUPERVISOR' ||
-                (string) $rolId === '20'
-            ) {
+            if ($this->hasFullInventoryRole($rolNombre, $rolId)) {
                 return true;
             }
         }
@@ -1583,23 +1611,64 @@ class VentaController extends Controller
             $rolId = null;
 
             if (is_array($rol)) {
-                $rolNombre = strtoupper(trim($rol['ROL'] ?? $rol['rol'] ?? ''));
-                $rolId = $rol['ID'] ?? $rol['id'] ?? $rol['ROL_ID'] ?? $rol['rol_id'] ?? null;
+                $rolNombre = $this->normalizeRoleName($rol['ROL'] ?? $rol['rol'] ?? '');
+                $rolId = $rol['ID'] ?? $rol['id'] ?? $rol['ROL_ID'] ?? $rol['rol_id'] ?? $rol['CODROL'] ?? $rol['codrol'] ?? null;
             } else {
-                $rolNombre = strtoupper(trim((string) $rol));
+                $rolNombre = $this->normalizeRoleName((string) $rol);
             }
 
-            if (
-                $rolNombre === 'ADMIN LIBRERIA' ||
-                $rolNombre === 'ADMIN LIBRERÍA' ||
-                $rolNombre === 'SUPERVISOR' ||
-                (string) $rolId === '20'
-            ) {
+            if ($this->hasFullInventoryRole($rolNombre, $rolId)) {
                 return true;
             }
         }
 
         return false;
     }
-}
 
+    private function hasFullInventoryRole(string $roleName, $roleId): bool
+    {
+        return $roleName === 'ADMIN LIBRERIA' ||
+            $roleName === 'SUPERVISOR' ||
+            (string) $roleId === '19' ||
+            (string) $roleId === '20' ||
+            $roleName === '19' ||
+            $roleName === '20';
+    }
+
+    private function formatSubinventarioPuntoVenta(SubInventario $subinventario): array
+    {
+        $stats = DB::table('subinventario_libro')
+            ->where('subinventario_id', $subinventario->id)
+            ->where('cantidad', '>', 0)
+            ->selectRaw('COUNT(DISTINCT libro_id) as total_libros, SUM(cantidad) as total_unidades')
+            ->first();
+
+        return [
+            'id' => $subinventario->id,
+            'descripcion' => $subinventario->descripcion,
+            'fecha_subinventario' => $subinventario->fecha_subinventario,
+            'estado' => $subinventario->estado,
+            'observaciones' => $subinventario->observaciones,
+            'total_libros' => $stats->total_libros ?? 0,
+            'total_unidades' => $stats->total_unidades ?? 0
+        ];
+    }
+
+    private function normalizeRoleName(string $roleName): string
+    {
+        $roleName = strtoupper(trim($roleName));
+
+        return strtr($roleName, [
+            'Á' => 'A',
+            'É' => 'E',
+            'Í' => 'I',
+            'Ó' => 'O',
+            'Ú' => 'U',
+            'á' => 'A',
+            'é' => 'E',
+            'í' => 'I',
+            'ó' => 'O',
+            'ú' => 'U',
+        ]);
+    }
+}

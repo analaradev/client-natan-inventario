@@ -376,14 +376,13 @@ class InventarioController extends Controller
 
         $libros = $query->paginate($perPage);
 
-        // Si se proporciona cod_congregante, obtener sus subinventarios
+        // Si se proporciona cod_congregante, obtener todos los subinventarios activos
         $misSubinventariosIds = [];
         $codCongregante = $request->get('cod_congregante');
         
         if ($codCongregante) {
-            $misSubinventariosIds = \DB::table('subinventario_user')
-                ->where('cod_congregante', $codCongregante)
-                ->pluck('subinventario_id')
+            $misSubinventariosIds = SubInventario::where('estado', 'activo')
+                ->pluck('id')
                 ->toArray();
         }
 
