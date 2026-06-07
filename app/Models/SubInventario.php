@@ -159,53 +159,6 @@ class SubInventario extends Model
     }
 
     /**
-     * Completar el sub-inventario (se vendió todo)
-     */
-    public function completar()
-    {
-        if ($this->estado !== 'activo') {
-            return false;
-        }
-
-        // Reducir el stock en sub-inventario de cada libro
-        foreach ($this->libros as $libro) {
-            $cantidad = $libro->pivot->cantidad;
-            $libro->decrement('stock_subinventario', $cantidad); // Cambiaremos este nombre después con migración
-        }
-
-        $this->estado = 'completado';
-        $this->save();
-
-        return true;
-    }
-
-    /**
-     * Cancelar el sub-inventario (devolver inventario)
-     */
-    public function cancelar()
-    {
-        if ($this->estado === 'cancelado') {
-            return false;
-        }
-
-        // Si estaba activo, devolver el inventario
-        if ($this->estado === 'activo') {
-            foreach ($this->libros as $libro) {
-                $cantidad = $libro->pivot->cantidad;
-                
-                // Aumentar stock disponible y reducir stock en sub-inventario
-                $libro->increment('stock', $cantidad);
-                $libro->decrement('stock_subinventario', $cantidad); // Cambiaremos este nombre después con migración
-            }
-        }
-
-        $this->estado = 'cancelado';
-        $this->save();
-
-        return true;
-    }
-
-    /**
      * Devolver parcialmente el sub-inventario (si no se vendió todo)
      */
     public function devolverParcial($libroId, $cantidadDevolver)

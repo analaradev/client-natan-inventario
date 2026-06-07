@@ -313,63 +313,6 @@ class SubInventarioController extends Controller
     }
 
     /**
-     * Completar un sub-inventario
-     */
-    public function completar(SubInventario $subinventario)
-    {
-        if ($subinventario->estado !== 'activo') {
-            return back()->with('warning', 'Este sub-inventario no está activo');
-        }
-
-        DB::beginTransaction();
-        try {
-            // Solo reducir el contador de stock en subinventarios
-            // (el stock general ya se restó cuando se creó el subinventario)
-            foreach ($subinventario->libros as $libro) {
-                $libro->decrement('stock_subinventario', $libro->pivot->cantidad);
-            }
-
-            $subinventario->update(['estado' => 'completado']);
-            DB::commit();
-
-            return back()->with('success', 'Sub-inventario completado exitosamente');
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return back()->with('error', 'Error al completar el sub-inventario: ' . $e->getMessage());
-        }
-    }
-
-    /**
-     * Cancelar un sub-inventario (devolver inventario)
-     */
-    public function cancelar(SubInventario $subinventario)
-    {
-        if ($subinventario->estado === 'cancelado') {
-            return back()->with('warning', 'Este sub-inventario ya está cancelado');
-        }
-
-        DB::beginTransaction();
-        try {
-            // Si estaba activo, devolver el stock del sub-inventario
-            if ($subinventario->estado === 'activo') {
-                foreach ($subinventario->libros as $libro) {
-                    $libro->decrement('stock_subinventario', $libro->pivot->cantidad); // Cambiaremos este nombre después
-                }
-            }
-
-            $subinventario->update(['estado' => 'cancelado']);
-            DB::commit();
-
-            return back()->with('success', 'Sub-inventario cancelado exitosamente. Stock devuelto al inventario.');
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return back()->with('error', 'Error al cancelar el sub-inventario: ' . $e->getMessage());
-        }
-    }
-
-    /**
      * Devolver parcialmente libros del sub-inventario
      */
     public function devolverParcial(Request $request, SubInventario $subinventario)

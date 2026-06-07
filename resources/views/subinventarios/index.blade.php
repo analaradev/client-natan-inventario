@@ -182,40 +182,9 @@
                                                 <i class="fas fa-edit"></i>
                                             </a>
 
-                                            <form action="{{ route('subinventarios.completar', $subinventario) }}" 
-                                                  method="POST" 
-                                                  class="inline"
-                                                  onsubmit="return confirm('¿Completar este sub-inventario? Esto indica que se vendió todo el inventario del sub-inventario.');">
-                                                @csrf
-                                                <button type="submit" 
-                                                        class="text-green-600 hover:text-green-900"
-                                                        title="Completar">
-                                                    <i class="fas fa-check-circle"></i>
-                                                </button>
-                                            </form>
-
-                                            <form action="{{ route('subinventarios.cancelar', $subinventario) }}" 
-                                                  method="POST" 
-                                                  class="inline"
-                                                  onsubmit="return confirm('¿Cancelar este sub-inventario? El inventario se devolverá.');">
-                                                @csrf
-                                                <button type="submit" 
-                                                        class="text-red-600 hover:text-red-900"
-                                                        title="Cancelar">
-                                                    <i class="fas fa-times-circle"></i>
-                                                </button>
-                                            </form>
                                         @else
                                             <button disabled class="text-gray-400 cursor-not-allowed opacity-60" title="Solo Admin Librería">
                                                 <i class="fas fa-edit"></i>
-                                            </button>
-
-                                            <button disabled class="text-gray-400 cursor-not-allowed opacity-60" title="Solo Admin Librería">
-                                                <i class="fas fa-check-circle"></i>
-                                            </button>
-
-                                            <button disabled class="text-gray-400 cursor-not-allowed opacity-60" title="Solo Admin Librería">
-                                                <i class="fas fa-times-circle"></i>
                                             </button>
                                         @endif
                                     @endif

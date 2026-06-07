@@ -181,24 +181,6 @@
                 <x-button variant="warning" icon="fas fa-edit" href="{{ route('subinventarios.edit', $subinventario) }}" class="w-full justify-center">
                     Editar
                 </x-button>
-
-                <form action="{{ route('subinventarios.completar', $subinventario) }}" 
-                      method="POST"
-                      onsubmit="return confirm('¿Completar este sub-inventario? Esto indica que se vendió todo el inventario del sub-inventario.')">
-                    @csrf
-                    <x-button type="submit" variant="success" icon="fas fa-check-circle" class="w-full justify-center">
-                        Marcar como Completado
-                    </x-button>
-                </form>
-
-                <form action="{{ route('subinventarios.cancelar', $subinventario) }}" 
-                      method="POST"
-                      onsubmit="return confirm('¿Cancelar este sub-inventario? El inventario se devolverá.')">
-                    @csrf
-                    <x-button type="submit" variant="danger" icon="fas fa-times-circle" class="w-full justify-center">
-                        Cancelar Sub-Inventario
-                    </x-button>
-                </form>
             </div>
         </x-card>
     @endif

@@ -67,14 +67,12 @@ Route::middleware('checkauth')->group(function () {
         Route::post('/apartados/{apartado}/abonos', [AbonoController::class, 'store'])->name('apartados.abonos.store');
         Route::delete('/abonos/{abono}', [AbonoController::class, 'destroy'])->name('apartados.abonos.destroy');
         
-        // Sub-inventarios - Solo crear, editar, eliminar, completar, cancelar requieren Admin Librería
+        // Sub-inventarios - Solo crear, editar, eliminar e importar requieren Admin Librería
         Route::get('/subinventarios/create', [SubInventarioController::class, 'create'])->name('subinventarios.create');
         Route::post('/subinventarios', [SubInventarioController::class, 'store'])->name('subinventarios.store');
         Route::get('/subinventarios/{subinventario}/edit', [SubInventarioController::class, 'edit'])->name('subinventarios.edit');
         Route::put('/subinventarios/{subinventario}', [SubInventarioController::class, 'update'])->name('subinventarios.update');
         Route::delete('/subinventarios/{subinventario}', [SubInventarioController::class, 'destroy'])->name('subinventarios.destroy');
-        Route::post('/subinventarios/{subinventario}/completar', [SubInventarioController::class, 'completar'])->name('subinventarios.completar');
-        Route::post('/subinventarios/{subinventario}/cancelar', [SubInventarioController::class, 'cancelar'])->name('subinventarios.cancelar');
         Route::post('/subinventarios/{subinventario}/devolver-parcial', [SubInventarioController::class, 'devolverParcial'])->name('subinventarios.devolver-parcial');
         
         // Importar libros en lote al subinventario
