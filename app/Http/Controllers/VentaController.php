@@ -277,45 +277,18 @@ class VentaController extends Controller
             
             // Validar que si es a plazos, debe tener cliente
             if ($esAPLazos && empty($validated['cliente_id'])) {
-                return back()->withErrors([
-                    'error' => 'Las ventas a plazos requieren un cliente asignado'
-                ])->withInput();
+                throw new \DomainException('Las ventas a plazos requieren un cliente asignado');
             }
             
             // Validar stock según el tipo de inventario
             if ($tipoInventario === 'general') {
                 // Validación para inventario general
                 if (!$esAPLazos) {
-                    foreach ($validated['libros'] as $item) {
-                        $libro = Libro::findOrFail($item['libro_id']);
-                        
-                        if ($libro->stock < $item['cantidad']) {
-                            return back()->withErrors([
-                                'error' => "Stock en inventario general insuficiente para '{$libro->nombre}'. Stock disponible: {$libro->stock}"
-                            ])->withInput();
-                        }
-                    }
+                    $this->lockAndValidateGeneralStock($validated['libros']);
                 }
             } else {
                 // Validación para subinventario
-                $subinventario = \App\Models\SubInventario::with('libros')->findOrFail($subinventarioId);
-                
-                foreach ($validated['libros'] as $item) {
-                    $libroEnSub = $subinventario->libros->firstWhere('id', $item['libro_id']);
-                    
-                    if (!$libroEnSub) {
-                        $libro = Libro::find($item['libro_id']);
-                        return back()->withErrors([
-                            'error' => "El libro '{$libro->nombre}' no está en este subinventario"
-                        ])->withInput();
-                    }
-                    
-                    if ($libroEnSub->pivot->cantidad < $item['cantidad']) {
-                        return back()->withErrors([
-                            'error' => "Cantidad insuficiente en subinventario para '{$libroEnSub->nombre}'. Disponible: {$libroEnSub->pivot->cantidad}"
-                        ])->withInput();
-                    }
-                }
+                $this->lockAndValidateSubinventarioStock($subinventarioId, $validated['libros']);
             }
 
             // Crear la venta
@@ -402,6 +375,10 @@ class VentaController extends Controller
             return redirect()->route('ventas.show', $venta)
                 ->with('success', 'Venta registrada exitosamente');
 
+        } catch (\DomainException $e) {
+            DB::rollBack();
+            return back()->withErrors(['error' => $e->getMessage()])
+                ->withInput();
         } catch (\Exception $e) {
             DB::rollBack();
             \Log::error('Error al crear venta: ' . $e->getMessage(), [
@@ -1098,42 +1075,16 @@ class VentaController extends Controller
         ]);
         DB::beginTransaction();
         try {
-            // 1. CARGAR SUBINVENTARIO Y VALIDAR ESTADO
-            $subinventario = \App\Models\SubInventario::with('libros')->findOrFail($validated['subinventario_id']);
-            
-            if ($subinventario->estado !== 'activo') {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'El subinventario no está activo'
-                ], 422);
-            }
-            
-            // 3. VALIDAR LIBROS Y STOCK
-            foreach ($validated['libros'] as $item) {
-                $libroEnSub = $subinventario->libros->firstWhere('id', $item['libro_id']);
-                
-                if (!$libroEnSub) {
-                    $libro = Libro::find($item['libro_id']);
-                    return response()->json([
-                        'success' => false,
-                        'message' => "El libro '{$libro->nombre}' no está en este subinventario"
-                    ], 422);
-                }
-                
-                if ($libroEnSub->pivot->cantidad < $item['cantidad']) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => "Cantidad insuficiente para '{$libroEnSub->nombre}'. Disponible: {$libroEnSub->pivot->cantidad}"
-                    ], 422);
-                }
-            }
+            // 1. Bloquear y validar stock del subinventario antes de crear la venta.
+            $stockLocks = $this->lockAndValidateSubinventarioStock(
+                $validated['subinventario_id'],
+                $validated['libros']
+            );
+            $subinventario = $stockLocks['subinventario'];
 
             // 4. VALIDAR CLIENTE SI ES REQUERIDO
             if ($validated['tipo_pago'] === 'credito' && empty($validated['cliente_id'])) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Las ventas a crédito requieren un cliente asignado'
-                ], 422);
+                throw new \DomainException('Las ventas a crédito requieren un cliente asignado');
             }
 
             // 5. VALIDAR ENVÍO
@@ -1237,6 +1188,12 @@ class VentaController extends Controller
                 ]
             ], 201);
 
+        } catch (\DomainException $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 422);
         } catch (\Exception $e) {
             DB::rollBack();
             \Log::error('Error al crear venta desde API móvil', [
@@ -1403,10 +1360,7 @@ class VentaController extends Controller
 
         try {
             if ($validated['tipo_pago'] === 'credito' && empty($validated['cliente_id'])) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Las ventas a crédito requieren un cliente asignado'
-                ], 422);
+                throw new \DomainException('Las ventas a crédito requieren un cliente asignado');
             }
 
             $tieneEnvio = isset($validated['tiene_envio']) && $validated['tiene_envio'];
@@ -1416,44 +1370,13 @@ class VentaController extends Controller
             $subinventario = null;
 
             if ($tipoInventario === 'subinventario') {
-                $subinventario = SubInventario::with('libros')->findOrFail($validated['subinventario_id']);
-
-                if ($subinventario->estado !== 'activo') {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'El subinventario no está activo'
-                    ], 422);
-                }
-
-                foreach ($validated['libros'] as $item) {
-                    $libroEnSub = $subinventario->libros->firstWhere('id', $item['libro_id']);
-
-                    if (!$libroEnSub) {
-                        $libro = Libro::find($item['libro_id']);
-                        return response()->json([
-                            'success' => false,
-                            'message' => "El libro '{$libro->nombre}' no está en este subinventario"
-                        ], 422);
-                    }
-
-                    if ($libroEnSub->pivot->cantidad < $item['cantidad']) {
-                        return response()->json([
-                            'success' => false,
-                            'message' => "Cantidad insuficiente para '{$libroEnSub->nombre}'. Disponible: {$libroEnSub->pivot->cantidad}"
-                        ], 422);
-                    }
-                }
+                $stockLocks = $this->lockAndValidateSubinventarioStock(
+                    $validated['subinventario_id'],
+                    $validated['libros']
+                );
+                $subinventario = $stockLocks['subinventario'];
             } else {
-                foreach ($validated['libros'] as $item) {
-                    $libro = Libro::findOrFail($item['libro_id']);
-
-                    if ($libro->stock < $item['cantidad']) {
-                        return response()->json([
-                            'success' => false,
-                            'message' => "Stock insuficiente para '{$libro->nombre}'. Disponible: {$libro->stock}"
-                        ], 422);
-                    }
-                }
+                $this->lockAndValidateGeneralStock($validated['libros']);
             }
 
             $venta = Venta::create([
@@ -1546,6 +1469,12 @@ class VentaController extends Controller
                 ]
             ], 201);
 
+        } catch (\DomainException $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 422);
         } catch (\Exception $e) {
             DB::rollBack();
             \Log::error('Error al crear venta desde API admin', [
@@ -1559,6 +1488,96 @@ class VentaController extends Controller
                 'message' => 'Error al crear la venta: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Agrupa cantidades por libro para validar el stock real solicitado.
+     */
+    private function aggregateBookQuantities(array $items): array
+    {
+        $quantities = [];
+
+        foreach ($items as $item) {
+            $libroId = (int) $item['libro_id'];
+            $cantidad = (int) $item['cantidad'];
+
+            if ($cantidad <= 0) {
+                continue;
+            }
+
+            $quantities[$libroId] = ($quantities[$libroId] ?? 0) + $cantidad;
+        }
+
+        ksort($quantities);
+
+        return $quantities;
+    }
+
+    /**
+     * Bloquea el stock del inventario general hasta que termine la transaccion.
+     */
+    private function lockAndValidateGeneralStock(array $items): array
+    {
+        $lockedBooks = [];
+
+        foreach ($this->aggregateBookQuantities($items) as $libroId => $cantidad) {
+            $libro = Libro::whereKey($libroId)->lockForUpdate()->firstOrFail();
+
+            if ((int) $libro->stock < $cantidad) {
+                throw new \DomainException(
+                    "Stock insuficiente para '{$libro->nombre}'. Disponible: {$libro->stock}"
+                );
+            }
+
+            $lockedBooks[$libroId] = $libro;
+        }
+
+        return $lockedBooks;
+    }
+
+    /**
+     * Bloquea el stock del subinventario hasta que termine la transaccion.
+     */
+    private function lockAndValidateSubinventarioStock(int $subinventarioId, array $items): array
+    {
+        $subinventario = SubInventario::whereKey($subinventarioId)
+            ->lockForUpdate()
+            ->firstOrFail();
+
+        if ($subinventario->estado !== 'activo') {
+            throw new \DomainException('El subinventario no está activo');
+        }
+
+        $lockedBooks = [];
+        $lockedPivots = [];
+
+        foreach ($this->aggregateBookQuantities($items) as $libroId => $cantidad) {
+            $libro = Libro::whereKey($libroId)->lockForUpdate()->firstOrFail();
+            $pivot = DB::table('subinventario_libro')
+                ->where('subinventario_id', $subinventarioId)
+                ->where('libro_id', $libroId)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$pivot) {
+                throw new \DomainException("El libro '{$libro->nombre}' no está en este subinventario");
+            }
+
+            if ((int) $pivot->cantidad < $cantidad) {
+                throw new \DomainException(
+                    "Cantidad insuficiente para '{$libro->nombre}'. Disponible: {$pivot->cantidad}"
+                );
+            }
+
+            $lockedBooks[$libroId] = $libro;
+            $lockedPivots[$libroId] = $pivot;
+        }
+
+        return [
+            'subinventario' => $subinventario,
+            'libros' => $lockedBooks,
+            'pivots' => $lockedPivots,
+        ];
     }
 
     /**
