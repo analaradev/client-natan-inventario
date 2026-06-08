@@ -1,32 +1,38 @@
-# client-natan-inventario
+# Natan Inventario
 
-Sistema privado de inventario desarrollado para cliente.
+<div align="center">
 
-> Repositorio de cliente. Mantener privado y revisar información sensible antes de compartir.
+![Client](https://img.shields.io/badge/Tipo-Cliente-111827?style=for-the-badge)
+![Private](https://img.shields.io/badge/Visibilidad-Privado-6b7280?style=for-the-badge)
+![Inventory](https://img.shields.io/badge/Tema-Inventario-16a34a?style=for-the-badge)
 
-## Categoría
+**Sistema privado para cliente orientado a gestion de inventario.**
 
-`client-` — proyecto profesional o de cliente.
+</div>
 
-## Descripción
+---
 
-Proyecto orientado a administrar inventario, productos, existencias o información operativa relacionada con control interno.
+## Contexto Profesional
+
+Proyecto orientado a administrar inventario, productos, existencias o informacion operativa relacionada con control interno.
 
 ## Rol
 
-Desarrollo de software, implementación de funcionalidades, soporte y mantenimiento del sistema.
+Desarrollo de software, implementacion de funcionalidades, soporte y mantenimiento del sistema.
 
-## Alcance general
+## Alcance General
 
-- Gestión de productos o inventario.
-- Consulta y registro de información.
+- Gestion de productos o inventario.
+- Consulta y registro de informacion.
 - Flujos administrativos.
-- Ajustes funcionales según operación del cliente.
+- Ajustes funcionales segun operacion del cliente.
+
+## Temas
+
+![Inventory](https://img.shields.io/badge/Inventario-16a34a?style=flat-square)
+![Admin](https://img.shields.io/badge/Gestion-2563eb?style=flat-square)
+![Client](https://img.shields.io/badge/Cliente-111827?style=flat-square)
 
 ## Privacidad
 
-No exponer bases de datos, credenciales, información comercial, datos internos o endpoints privados.
-
-## Nota para portafolio
-
-Puede mencionarse como experiencia en sistemas de inventario y plataformas administrativas para cliente.
+Repositorio privado. No exponer bases de datos, credenciales, informacion comercial, datos internos o endpoints privados.
