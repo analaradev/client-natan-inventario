@@ -17,7 +17,7 @@ class UsuarioController extends Controller
         $codCongregante = session('codCongregante');
         $page = $request->get('page', 1); // Laravel usa 'page' en base 1
         $pagina = $page - 1; // La API usa base 0
-        $termino = $request->get('search', '');
+        $termino = trim($request->get('search', ''));
         
         $congregantes = [];
         $totalActivos = 0;
@@ -25,6 +25,29 @@ class UsuarioController extends Controller
         $error = null;
 
         try {
+            if (!empty($termino) && ctype_digit($termino)) {
+                $congregantePorId = $this->buscarCongregantePorId($codCongregante, $termino);
+
+                if ($congregantePorId) {
+                    $congregantesArray = [$congregantePorId];
+                    $totalActivos = ($congregantePorId['CODSTATUS'] ?? '') == '2' ? 1 : 0;
+                    $totalNuevos = ($congregantePorId['CODSTATUS'] ?? '') == '1' ? 1 : 0;
+
+                    $congregantes = new LengthAwarePaginator(
+                        $congregantesArray,
+                        1,
+                        1,
+                        $page,
+                        [
+                            'path' => $request->url(),
+                            'query' => $request->query(),
+                        ]
+                    );
+
+                    return view('usuarios.index', compact('congregantes', 'totalActivos', 'totalNuevos', 'error'));
+                }
+            }
+
             // Determinar si es búsqueda o listado completo
             $endpoint = !empty($termino) 
                 ? 'https://www.sistemasdevida.com/pan/rest2/index.php/congregante/buscar_paginado'
@@ -88,6 +111,56 @@ class UsuarioController extends Controller
         }
 
         return view('usuarios.index', compact('congregantes', 'totalActivos', 'totalNuevos', 'error'));
+    }
+
+    /**
+     * Busca un congregante por CODCONGREGANTE exacto.
+     */
+    private function buscarCongregantePorId($codCongregante, string $idCongregante): ?array
+    {
+        $response = Http::post('https://www.sistemasdevida.com/pan/rest2/index.php/congregante/obtener_detallado', [
+            'codCongregante' => $codCongregante,
+            'idCongregante' => $idCongregante
+        ]);
+
+        if (!$response->successful()) {
+            Log::warning('No se pudo buscar congregante por ID', [
+                'idCongregante' => $idCongregante,
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+
+            return null;
+        }
+
+        $data = $response->json();
+
+        if (($data['error'] ?? true) || empty($data['congregante']) || !is_array($data['congregante'])) {
+            return null;
+        }
+
+        return $this->normalizarCongreganteParaListado($data['congregante'], $idCongregante);
+    }
+
+    /**
+     * Asegura que el detalle del congregante tenga los campos que usa la tabla.
+     */
+    private function normalizarCongreganteParaListado(array $congregante, string $idCongregante): array
+    {
+        return array_merge([
+            'CODCONGREGANTE' => $idCongregante,
+            'NOMBRE' => '',
+            'APELLIDOS' => '',
+            'CEL' => '',
+            'TELCASA' => '',
+            'CIUDAD' => '',
+            'CODSTATUS' => '',
+            'MAIL' => '',
+        ], $congregante, [
+            'CODCONGREGANTE' => $congregante['CODCONGREGANTE']
+                ?? $congregante['codCongregante']
+                ?? $idCongregante,
+        ]);
     }
 
     /**

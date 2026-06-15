@@ -53,58 +53,36 @@
             </div>
             
             <!-- Botones de exportación e importación -->
-            @if($subinventario->getTotalLibros() > 0)
-                <div class="flex gap-3">
-                    @if($subinventario->estado === 'activo')
-                        <x-button 
-                            type="button" 
-                            variant="primary" 
-                            icon="fas fa-plus-circle"
-                            onclick="window.location='{{ route('subinventarios.import-form', $subinventario) }}'"
-                        >
-                            Importar Libros
-                        </x-button>
-                    @endif
+            <div class="flex gap-3">
+                @if($subinventario->estado === 'activo')
+                    <x-button 
+                        type="button" 
+                        variant="primary" 
+                        icon="fas fa-plus-circle"
+                        onclick="window.location='{{ route('subinventarios.import-form', $subinventario) }}'"
+                    >
+                        Importar Libros
+                    </x-button>
+                @endif
 
-                    <x-button 
-                        type="button" 
-                        variant="success" 
-                        icon="fas fa-file-excel"
-                        onclick="window.location='{{ route('subinventarios.libros.export.excel', $subinventario) }}'"
-                    >
-                        Exportar Excel
-                    </x-button>
-                    
-                    <x-button 
-                        type="button" 
-                        variant="danger" 
-                        icon="fas fa-file-pdf"
-                        onclick="window.location='{{ route('subinventarios.libros.export.pdf', $subinventario) }}'"
-                    >
-                        Exportar PDF
-                    </x-button>
-                </div>
-            @else
-                <div class="flex gap-3">
-                    <x-button 
-                        type="button" 
-                        variant="success" 
-                        icon="fas fa-file-excel"
-                        onclick="window.location='{{ route('subinventarios.libros.export.excel', $subinventario) }}'"
-                    >
-                        Exportar Excel
-                    </x-button>
-                    
-                    <x-button 
-                        type="button" 
-                        variant="danger" 
-                        icon="fas fa-file-pdf"
-                        onclick="window.location='{{ route('subinventarios.libros.export.pdf', $subinventario) }}'"
-                    >
-                        Exportar PDF
-                    </x-button>
-                </div>
-            @endif
+                <x-button 
+                    type="button" 
+                    variant="success" 
+                    icon="fas fa-file-excel"
+                    onclick="window.location='{{ route('subinventarios.libros.export.excel', $subinventario) }}'"
+                >
+                    Exportar Excel
+                </x-button>
+                
+                <x-button 
+                    type="button" 
+                    variant="danger" 
+                    icon="fas fa-file-pdf"
+                    onclick="window.location='{{ route('subinventarios.libros.export.pdf', $subinventario) }}'"
+                >
+                    Exportar PDF
+                </x-button>
+            </div>
         </div>
 
         @if($libros->count() > 0)

@@ -14,17 +14,6 @@
     title="Listado de Libros"
     description="Total: {{ $totalLibros }} libros"
 >
-    @if($isAdminLibreria)
-        <x-slot name="headerButton">
-            <x-button 
-                variant="success" 
-                icon="fas fa-file-excel"
-                onclick="window.location='{{ route('inventario.import') }}'"
-            >
-                Importar Excel
-            </x-button>
-        </x-slot>
-    @endif
     <x-slot name="header">
         <x-button 
             variant="success" 
@@ -34,7 +23,15 @@
         >
             Sub-Inventarios
         </x-button>
-        @if(\App\Helpers\AuthHelper::isAdminLibreria())
+        @if($isAdminLibreria)
+            <x-button 
+                variant="success" 
+                icon="fas fa-file-excel"
+                onclick="window.location='{{ route('inventario.import') }}'"
+                class="mr-2"
+            >
+                Importar Excel
+            </x-button>
             <x-button 
                 variant="primary" 
                 icon="fas fa-plus"

@@ -12,6 +12,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         // Primero cambiamos la columna a VARCHAR temporal
         DB::statement('ALTER TABLE pagos MODIFY COLUMN metodo_pago VARCHAR(50)');
         
@@ -27,6 +31,10 @@ return new class extends Migration
      */
     public function down(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         // Primero cambiamos la columna a VARCHAR temporal
         DB::statement('ALTER TABLE pagos MODIFY COLUMN metodo_pago VARCHAR(50)');
         
