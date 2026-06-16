@@ -16,7 +16,7 @@
 >
     <x-slot name="header">
         <x-button 
-            variant="success" 
+            variant="info" 
             icon="fas fa-box-open"
             onclick="window.location='{{ route('subinventarios.index') }}'"
             class="mr-2"
