@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use Tests\TestCase;
 use App\Models\Libro;
 use App\Models\SubInventario;
+use App\Models\Movimiento;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -149,6 +150,25 @@ class ImportLibrosSubinventarioTest extends TestCase
         $libro2->refresh();
         $this->assertEquals(10, $libro1->stock_subinventario);
         $this->assertEquals(5, $libro2->stock_subinventario);
+
+        // Verificar decremento del stock general
+        $this->assertEquals(40, $libro1->stock);
+        $this->assertEquals(25, $libro2->stock);
+
+        // Verificar creación de movimientos de inventario
+        $this->assertDatabaseHas('movimientos', [
+            'libro_id' => $libro1->id,
+            'tipo_movimiento' => 'salida',
+            'tipo_salida' => 'transferencia_subinventario',
+            'cantidad' => 10
+        ]);
+
+        $this->assertDatabaseHas('movimientos', [
+            'libro_id' => $libro2->id,
+            'tipo_movimiento' => 'salida',
+            'tipo_salida' => 'transferencia_subinventario',
+            'cantidad' => 5
+        ]);
     }
 
     public function test_import_updates_existing_book_quantity()
@@ -204,6 +224,15 @@ class ImportLibrosSubinventarioTest extends TestCase
 
         $libro->refresh();
         $this->assertEquals(15, $libro->stock_subinventario);
+        $this->assertEquals(45, $libro->stock);
+
+        // Verificar creación del movimiento
+        $this->assertDatabaseHas('movimientos', [
+            'libro_id' => $libro->id,
+            'tipo_movimiento' => 'salida',
+            'tipo_salida' => 'transferencia_subinventario',
+            'cantidad' => 5
+        ]);
     }
 
     public function test_import_fails_on_insufficient_stock()

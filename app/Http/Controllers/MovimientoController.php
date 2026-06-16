@@ -111,7 +111,7 @@ class MovimientoController extends Controller
 
         DB::beginTransaction();
         try {
-            $libro = Libro::findOrFail($request->libro_id);
+            $libro = Libro::where('id', $request->libro_id)->lockForUpdate()->firstOrFail();
 
             // Validar que hay stock suficiente para salidas
             if ($request->tipo_movimiento === 'salida' && $libro->stock < $request->cantidad) {

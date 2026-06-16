@@ -49,7 +49,8 @@ class Movimiento extends Model
             'compra' => 'Compra de Inventario',
             'devolucion' => 'Devolución de Cliente',
             'ajuste_positivo' => 'Ajuste Positivo',
-            'donacion_recibida' => 'Donación Recibida'
+            'donacion_recibida' => 'Donación Recibida',
+            'devolucion_subinventario' => 'Retorno de Sub-Inventario'
         ];
     }
 
@@ -61,7 +62,8 @@ class Movimiento extends Model
             'perdida' => 'Pérdida/Merma',
             'ajuste_negativo' => 'Ajuste Negativo',
             'donacion_entregada' => 'Donación Entregada',
-            'prestamo' => 'Préstamo'
+            'prestamo' => 'Préstamo',
+            'transferencia_subinventario' => 'Envío a Sub-Inventario'
         ];
     }
 
@@ -86,6 +88,7 @@ class Movimiento extends Model
                 'devolucion' => 'bg-blue-100 text-blue-800',
                 'ajuste_positivo' => 'bg-purple-100 text-purple-800',
                 'donacion_recibida' => 'bg-pink-100 text-pink-800',
+                'devolucion_subinventario' => 'bg-cyan-100 text-cyan-800',
                 default => 'bg-gray-100 text-gray-800'
             };
         } elseif ($this->tipo_movimiento === 'salida') {
@@ -95,6 +98,7 @@ class Movimiento extends Model
                 'ajuste_negativo' => 'bg-orange-100 text-orange-800',
                 'donacion_entregada' => 'bg-yellow-100 text-yellow-800',
                 'prestamo' => 'bg-indigo-100 text-indigo-800',
+                'transferencia_subinventario' => 'bg-teal-100 text-teal-800',
                 default => 'bg-gray-100 text-gray-800'
             };
         }
@@ -111,6 +115,7 @@ class Movimiento extends Model
                 'devolucion' => 'fas fa-undo',
                 'ajuste_positivo' => 'fas fa-plus-circle',
                 'donacion_recibida' => 'fas fa-gift',
+                'devolucion_subinventario' => 'fas fa-undo-alt',
                 default => 'fas fa-arrow-down'
             };
         } elseif ($this->tipo_movimiento === 'salida') {
@@ -120,6 +125,7 @@ class Movimiento extends Model
                 'ajuste_negativo' => 'fas fa-minus-circle',
                 'donacion_entregada' => 'fas fa-hand-holding-heart',
                 'prestamo' => 'fas fa-handshake',
+                'transferencia_subinventario' => 'fas fa-store',
                 default => 'fas fa-arrow-up'
             };
         }
