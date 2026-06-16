@@ -121,7 +121,7 @@
                 <p><i class="fas fa-calendar mr-2"></i> Fecha: {{ date('d/m/Y') }}</p>
                 <p><i class="fas fa-clock mr-2"></i> Hora: {{ date('H:i:s') }}</p>
                 <p><i class="fas fa-user mr-2"></i> Usuario: Admin</p>
-                <p><i class="fas fa-code-branch mr-2"></i> Versión: <span class="font-semibold text-primary-600">v2.1.0</span></p>
+                <p><i class="fas fa-code-branch mr-2"></i> Versión: <span class="font-semibold text-primary-600">{{ trim(file_exists(base_path('version.txt')) ? file_get_contents(base_path('version.txt')) : 'v2.1.0') }}</span></p>
             </div>
         </x-card>
     </div>
