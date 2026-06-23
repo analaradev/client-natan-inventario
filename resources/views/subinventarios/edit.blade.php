@@ -80,6 +80,25 @@
                     </div>
                 @enderror
 
+                @if ($errors->has('libros.*') || $errors->has('error'))
+                    <div class="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                        @foreach ($errors->get('libros.*') as $mensajes)
+                            @foreach ($mensajes as $mensaje)
+                                <p class="text-sm text-red-600">{{ $mensaje }}</p>
+                            @endforeach
+                        @endforeach
+                        @error('error')
+                            <p class="text-sm text-red-600">{{ $message }}</p>
+                        @enderror
+                    </div>
+                @endif
+
+                <div id="librosClientError"
+                     class="hidden mb-4 p-4 bg-red-50 border border-red-200 rounded-lg"
+                     role="alert">
+                    <p class="text-sm text-red-600"></p>
+                </div>
+
                 <div id="librosContainer" class="space-y-3">
                     <!-- Los libros se agregarán aquí dinámicamente -->
                 </div>
@@ -116,10 +135,26 @@
 </x-page-layout>
 
 @push('scripts')
+@php
+    $librosFormulario = old('libros');
+
+    if ($librosFormulario === null) {
+        $librosFormulario = $subinventario->libros->map(function ($libro) {
+            return [
+                'libro_id' => $libro->id,
+                'cantidad' => $libro->pivot->cantidad,
+            ];
+        })->values()->all();
+    } else {
+        // Al quitar una fila pueden quedar índices separados (0, 2, 3...).
+        // Reindexarlos garantiza que JSON siga siendo un arreglo y admita forEach.
+        $librosFormulario = collect($librosFormulario)->values()->all();
+    }
+@endphp
 <script>
     let libroIndex = 0;
     const libros = @json($libros);
-    const subinventarioLibros = @json($subinventario->libros);
+    const subinventarioLibros = @json($librosFormulario);
 
     function normalizarTexto(texto) {
         return String(texto || '')
@@ -149,7 +184,7 @@
         
         // Encontrar el libro seleccionado si existe
         const libroSeleccionado = libroId ? libros.find(l => l.id == libroId) : null;
-        const stockDisponible = libroSeleccionado ? (libroSeleccionado.stock_disponible_edicion || libroSeleccionado.stock) : 0;
+        const stockDisponible = libroSeleccionado ? (libroSeleccionado.stock_disponible_edicion ?? libroSeleccionado.stock) : 0;
         
         div.innerHTML = `
             <div class="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -159,12 +194,12 @@
                         <input type="hidden" 
                                name="libros[${currentIndex}][libro_id]" 
                                id="libro_id_${currentIndex}"
-                               value="${libroId}"
-                               required>
+                               value="${libroId}">
                         <input type="text" 
                                id="search_${currentIndex}"
                                placeholder="Busca un libro..." 
                                autocomplete="off"
+                               required
                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2"
                                value="${libroSeleccionado ? escaparHtml(libroSeleccionado.nombre) : ''}"
                                data-index="${currentIndex}">
@@ -184,6 +219,13 @@
                     <p id="stock-info-${currentIndex}" class="mt-1 text-xs text-gray-500">${libroSeleccionado ? 'Stock disponible: ' + stockDisponible : ''}</p>
                 </div>
             </div>
+            <button type="button"
+                    onclick="eliminarLibro(${currentIndex})"
+                    class="mt-6 text-red-600 hover:text-red-800 p-2"
+                    title="Quitar libro"
+                    aria-label="Quitar libro">
+                <i class="fas fa-trash"></i>
+            </button>
         `;
         
         container.appendChild(div);
@@ -193,7 +235,8 @@
         const searchInput = div.querySelector(`#search_${currentIndex}`);
         const dropdown = div.querySelector(`#dropdown_${currentIndex}`);
         
-        searchInput.addEventListener('input', () => filtrarLibros(currentIndex));
+        searchInput.dataset.selectedName = libroSeleccionado ? libroSeleccionado.nombre : '';
+        searchInput.addEventListener('input', () => manejarBusqueda(currentIndex));
         searchInput.addEventListener('focus', () => filtrarLibros(currentIndex));
         
         document.addEventListener('click', (e) => {
@@ -204,6 +247,21 @@
         
         libroIndex++;
         actualizarLibrosDisponibles();
+    }
+
+    function manejarBusqueda(index) {
+        const searchInput = document.getElementById(`search_${index}`);
+        const libroIdInput = document.getElementById(`libro_id_${index}`);
+
+        if (searchInput.value !== (searchInput.dataset.selectedName || '')) {
+            libroIdInput.value = '';
+            document.getElementById(`stock-info-${index}`).textContent = 'Selecciona un libro de la lista';
+            document.querySelector(`input[name="libros[${index}][cantidad]"]`).removeAttribute('max');
+        }
+
+        searchInput.removeAttribute('aria-invalid');
+        ocultarErrorLibros();
+        filtrarLibros(index);
     }
 
     function filtrarLibros(index) {
@@ -230,7 +288,7 @@
         // Mostrar dropdown
         if (librosFiltrados.length > 0 && (valor.length > 0 || searchInput === document.activeElement)) {
             dropdown.innerHTML = librosFiltrados.map(libro => {
-                const stock = libro.stock_disponible_edicion || libro.stock;
+                const stock = libro.stock_disponible_edicion ?? libro.stock;
                 return `
                 <div class="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b" 
                      data-libro-id="${libro.id}" 
@@ -258,15 +316,39 @@
 
     function seleccionarLibro(index, libroId, libroNombre, stock) {
         document.getElementById(`libro_id_${index}`).value = libroId;
-        document.getElementById(`search_${index}`).value = libroNombre;
+        const searchInput = document.getElementById(`search_${index}`);
+        searchInput.value = libroNombre;
+        searchInput.dataset.selectedName = libroNombre;
+        searchInput.removeAttribute('aria-invalid');
         document.getElementById(`dropdown_${index}`).style.display = 'none';
         document.getElementById(`stock-info-${index}`).textContent = `Stock disponible: ${stock}`;
         
         // Actualizar max del input cantidad
         const cantidadInput = document.querySelector(`input[name="libros[${index}][cantidad]"]`);
         cantidadInput.max = stock;
-        
+
+        ocultarErrorLibros();
         actualizarLibrosDisponibles();
+    }
+
+    function eliminarLibro(index) {
+        document.getElementById(`libro-${index}`)?.remove();
+        document.getElementById('emptyMessage').style.display =
+            document.querySelectorAll('.libro-item').length === 0 ? 'block' : 'none';
+        ocultarErrorLibros();
+    }
+
+    function mostrarErrorLibros(mensaje, input = null) {
+        const error = document.getElementById('librosClientError');
+        error.querySelector('p').textContent = mensaje;
+        error.classList.remove('hidden');
+        input?.setAttribute('aria-invalid', 'true');
+        input?.focus();
+        error.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    function ocultarErrorLibros() {
+        document.getElementById('librosClientError').classList.add('hidden');
     }
 
     function actualizarLibrosDisponibles() {
@@ -284,7 +366,7 @@
         
         // Encontrar el libro seleccionado si existe
         const libroSeleccionado = libroId ? libros.find(l => l.id == libroId) : null;
-        const stockDisponible = libroSeleccionado ? (libroSeleccionado.stock_disponible_edicion || libroSeleccionado.stock) : 0;
+        const stockDisponible = libroSeleccionado ? (libroSeleccionado.stock_disponible_edicion ?? libroSeleccionado.stock) : 0;
         
         div.innerHTML = `
             <div class="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -294,12 +376,12 @@
                         <input type="hidden" 
                                name="libros[${currentIndex}][libro_id]" 
                                id="libro_id_${currentIndex}"
-                               value="${libroId}"
-                               required>
+                               value="${libroId}">
                         <input type="text" 
                                id="search_${currentIndex}"
                                placeholder="Busca un libro..." 
                                autocomplete="off"
+                               required
                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2"
                                value="${libroSeleccionado ? escaparHtml(libroSeleccionado.nombre) : ''}"
                                data-index="${currentIndex}">
@@ -319,6 +401,13 @@
                     <p id="stock-info-${currentIndex}" class="mt-1 text-xs text-gray-500">${libroSeleccionado ? 'Stock disponible: ' + stockDisponible : ''}</p>
                 </div>
             </div>
+            <button type="button"
+                    onclick="eliminarLibro(${currentIndex})"
+                    class="mt-6 text-red-600 hover:text-red-800 p-2"
+                    title="Quitar libro"
+                    aria-label="Quitar libro">
+                <i class="fas fa-trash"></i>
+            </button>
         `;
         
         // Agregar al INICIO del contenedor
@@ -334,7 +423,8 @@
         const searchInput = div.querySelector(`#search_${currentIndex}`);
         const dropdown = div.querySelector(`#dropdown_${currentIndex}`);
         
-        searchInput.addEventListener('input', () => filtrarLibros(currentIndex));
+        searchInput.dataset.selectedName = libroSeleccionado ? libroSeleccionado.nombre : '';
+        searchInput.addEventListener('input', () => manejarBusqueda(currentIndex));
         searchInput.addEventListener('focus', () => filtrarLibros(currentIndex));
         
         document.addEventListener('click', (e) => {
@@ -349,8 +439,41 @@
 
     // Cargar los libros existentes al iniciar
     document.addEventListener('DOMContentLoaded', function() {
-        subinventarioLibros.forEach(libro => {
-            agregarLibro(libro.id, libro.pivot.cantidad);
+        subinventarioLibros.forEach(item => {
+            agregarLibro(item.libro_id, item.cantidad);
+        });
+
+        document.getElementById('emptyMessage').style.display =
+            subinventarioLibros.length === 0 ? 'block' : 'none';
+
+        document.getElementById('subinventarioForm').addEventListener('submit', function(event) {
+            ocultarErrorLibros();
+            const filas = Array.from(document.querySelectorAll('.libro-item'));
+
+            if (filas.length === 0) {
+                event.preventDefault();
+                mostrarErrorLibros('Debes agregar por lo menos un libro al sub-inventario.');
+                return;
+            }
+
+            const ids = [];
+            for (const fila of filas) {
+                const idInput = fila.querySelector('input[type="hidden"][name$="[libro_id]"]');
+                const searchInput = fila.querySelector('input[id^="search_"]');
+
+                if (!idInput.value) {
+                    event.preventDefault();
+                    mostrarErrorLibros('Selecciona el libro desde la lista de resultados antes de guardar.', searchInput);
+                    return;
+                }
+
+                if (ids.includes(idInput.value)) {
+                    event.preventDefault();
+                    mostrarErrorLibros('El mismo libro no puede agregarse más de una vez.', searchInput);
+                    return;
+                }
+                ids.push(idInput.value);
+            }
         });
     });
 </script>

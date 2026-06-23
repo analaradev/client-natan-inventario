@@ -96,17 +96,67 @@ class InventarioController extends Controller
      */
     public function update(Request $request, string $id)
     {
-        $libro = Libro::findOrFail($id);
-
         $validated = $request->validate(
             $this->libroService->getUpdateRules($id),
             $this->libroService->getValidationMessages()
         );
 
-        $libro->update($validated);
+        \Illuminate\Support\Facades\DB::beginTransaction();
+        try {
+            $libro = Libro::whereKey($id)->lockForUpdate()->firstOrFail();
+            $oldStock = (int)$libro->stock;
 
-        return redirect()->route('inventario.show', $libro->id)
-            ->with('success', 'Libro actualizado exitosamente');
+            // Validar que el stock no sea menor que la cantidad reservada en apartados activos
+            if (isset($validated['stock'])) {
+                $newStockVal = (int)$validated['stock'];
+                
+                if ($newStockVal < $oldStock) {
+                    $reservadoGeneral = (int) \Illuminate\Support\Facades\DB::table('apartado_detalles as ad')
+                        ->join('apartados as a', 'a.id', '=', 'ad.apartado_id')
+                        ->where('ad.libro_id', $libro->id)
+                        ->where('a.tipo_inventario', 'general')
+                        ->where('a.estado', 'activo')
+                        ->sum('ad.cantidad');
+                    
+                    if ($newStockVal < $reservadoGeneral) {
+                        throw new \DomainException("El stock no puede ser menor que la cantidad reservada en apartados activos ({$reservadoGeneral} unidades)");
+                    }
+                }
+            }
+
+            $libro->update($validated);
+            $newStock = (int)$libro->stock;
+
+            if ($oldStock !== $newStock) {
+                $diferencia = $newStock - $oldStock;
+                $tipoMovimiento = $diferencia > 0 ? 'entrada' : 'salida';
+                $tipoAjuste = $diferencia > 0 ? 'ajuste_positivo' : 'ajuste_negativo';
+
+                \App\Models\Movimiento::create([
+                    'libro_id' => $libro->id,
+                    'tipo_movimiento' => $tipoMovimiento,
+                    ($tipoMovimiento === 'entrada' ? 'tipo_entrada' : 'tipo_salida') => $tipoAjuste,
+                    'cantidad' => abs($diferencia),
+                    'precio_unitario' => $libro->precio,
+                    'fecha' => now()->toDateString(),
+                    'observaciones' => "Ajuste manual de stock por actualización del libro (Stock anterior: {$oldStock}, Nuevo stock: {$newStock})",
+                    'usuario' => auth()->user()->name ?? 'Admin',
+                ]);
+            }
+
+            \Illuminate\Support\Facades\DB::commit();
+
+            return redirect()->route('inventario.show', $libro->id)
+                ->with('success', 'Libro actualizado exitosamente');
+
+        } catch (\DomainException $e) {
+            \Illuminate\Support\Facades\DB::rollBack();
+            return back()->withErrors(['stock' => $e->getMessage()])->withInput();
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\DB::rollBack();
+            return back()->withErrors(['error' => 'Error al actualizar el libro: ' . $e->getMessage()])
+                ->withInput();
+        }
     }
 
     /**
@@ -115,6 +165,16 @@ class InventarioController extends Controller
     public function destroy(string $id)
     {
         $libro = Libro::findOrFail($id);
+
+        // Validar si tiene relaciones
+        $hasMovements = $libro->movimientos()->exists();
+        $hasApartados = \App\Models\ApartadoDetalle::where('libro_id', $libro->id)->exists();
+        $hasSubinventarios = $libro->subinventarios()->wherePivot('cantidad', '>', 0)->exists();
+
+        if ($hasMovements || $hasApartados || $hasSubinventarios) {
+            return back()->with('error', "No se puede eliminar el libro '{$libro->nombre}' porque cuenta con historial de movimientos, ventas, apartados o existencias en subinventarios. Si ya no deseas usar este libro, te sugerimos editar su stock a 0.");
+        }
+
         $libro->delete();
 
         return redirect()->route('inventario.index')
@@ -376,13 +436,16 @@ class InventarioController extends Controller
 
         $libros = $query->paginate($perPage);
 
-        // Si se proporciona cod_congregante, obtener todos los subinventarios activos
+        // Si se proporciona cod_congregante, obtener los subinventarios activos asignados a este congregante
         $misSubinventariosIds = [];
         $codCongregante = $request->get('cod_congregante');
         
         if ($codCongregante) {
-            $misSubinventariosIds = SubInventario::where('estado', 'activo')
-                ->pluck('id')
+            $misSubinventariosIds = \DB::table('subinventario_user')
+                ->join('subinventarios', 'subinventario_user.subinventario_id', '=', 'subinventarios.id')
+                ->where('subinventario_user.cod_congregante', $codCongregante)
+                ->where('subinventarios.estado', 'activo')
+                ->pluck('subinventario_user.subinventario_id')
                 ->toArray();
         }
 

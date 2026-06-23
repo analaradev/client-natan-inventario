@@ -33,8 +33,8 @@ class AuthController extends Controller
             'contra' => 'required|string',
         ]);
 
-        // Login de prueba temporal para testing
-        if ($request->user === 'test' && $request->contra === 'test123') {
+        // Login de prueba temporal para testing (solo disponible en entorno testing/local)
+        if ((app()->environment('testing') || app()->environment('local')) && $request->user === 'test' && $request->contra === 'test123') {
             Session::put('codCongregante', 'TEST_TOKEN_123');
             Session::put('roles', [['ROL' => 'ADMIN LIBRERIA']]);
             Session::put('username', 'Usuario de Prueba');

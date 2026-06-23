@@ -113,10 +113,22 @@ class MovimientoController extends Controller
         try {
             $libro = Libro::where('id', $request->libro_id)->lockForUpdate()->firstOrFail();
 
-            // Validar que hay stock suficiente para salidas
-            if ($request->tipo_movimiento === 'salida' && $libro->stock < $request->cantidad) {
-                return back()->withErrors(['cantidad' => 'No hay suficiente stock. Stock actual: ' . $libro->stock])
-                    ->withInput();
+            // Validar que hay stock suficiente para salidas (restando apartados generales activos)
+            if ($request->tipo_movimiento === 'salida') {
+                $reservadoGeneral = (int) \Illuminate\Support\Facades\DB::table('apartado_detalles as ad')
+                    ->join('apartados as a', 'a.id', '=', 'ad.apartado_id')
+                    ->where('ad.libro_id', $libro->id)
+                    ->where('a.tipo_inventario', 'general')
+                    ->where('a.estado', 'activo')
+                    ->sum('ad.cantidad');
+                
+                $stockDisponible = $libro->stock - $reservadoGeneral;
+
+                if ($stockDisponible < $request->cantidad) {
+                    \Illuminate\Support\Facades\DB::rollBack();
+                    return back()->withErrors(['cantidad' => 'No hay suficiente stock disponible (excluyendo apartados activos). Stock disponible: ' . $stockDisponible])
+                        ->withInput();
+                }
             }
 
             // Crear el movimiento

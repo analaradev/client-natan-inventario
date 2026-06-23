@@ -176,7 +176,7 @@
             
             // Actualizar el max del input de cantidad
             const cantidadInput = document.querySelector(`input[name="libros[${index}][cantidad]"]`);
-            cantidadInput.max = disponible;
+            cantidadInput.max = stock;
         } else {
             stockInfo.textContent = '';
         }

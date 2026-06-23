@@ -34,6 +34,7 @@ Route::prefix('v1')->group(function () {
     Route::prefix('movil')->group(function () {
         // Puntos de venta según rol: vendedor, admin librería o supervisor
         Route::get('/puntos-venta', [VentaController::class, 'apiPuntosVenta']);
+        Route::get('/libros-disponibles', [SubInventarioController::class, 'apiTestListarTodosLibros']);
 
         // Subinventarios para usuarios normales y admin/supervisor
         Route::get('/subinventarios/mis-subinventarios/{cod_congregante}', [SubInventarioController::class, 'apiMisSubinventarios']);
@@ -57,20 +58,23 @@ Route::prefix('v1')->group(function () {
     });
 });
 
-// API Routes de TESTEO
-Route::prefix('v1/test')->group(function () {
-    // Listar todos los libros con información de vendibilidad
-    Route::get('/todos-los-libros', [SubInventarioController::class, 'apiTestListarTodosLibros']);
-});
+// Herramientas de diagnóstico: nunca exponerlas en producción.
+if (app()->environment('local', 'testing')) {
+    Route::prefix('v1/test')->group(function () {
+        Route::get('/todos-los-libros', [SubInventarioController::class, 'apiTestListarTodosLibros']);
+    });
+}
 
 // API Routes sin versión (para uso interno)
 Route::get('/apartados/buscar', [ApartadoController::class, 'apiBuscar']);
 Route::get('/clientes/buscar', [ClienteController::class, 'apiBuscar']);
 
-// Ruta para ejecutar migraciones (SOLO PARA DESARROLLO/HOSTING SIN TERMINAL)
+// Operaciones destructivas disponibles únicamente en desarrollo local.
+if (app()->environment('local')) {
 Route::get('/run-migrations/{secret_key}', function ($secret_key) {
-    // Clave secreta para seguridad - cámbiala por algo único
-    if ($secret_key !== 'pan_de_vida_2026_migrations') {
+    // Clave secreta para seguridad - cargada desde .env
+    $configuredKey = env('DB_MIGRATIONS_KEY', 'pan_de_vida_2026_migrations');
+    if ($secret_key !== $configuredKey) {
         return response()->json([
             'success' => false,
             'message' => 'Acceso no autorizado'
@@ -99,7 +103,8 @@ Route::get('/run-migrations/{secret_key}', function ($secret_key) {
 
 // Ruta para agregar columnas directamente (EMERGENCIA)
 Route::get('/fix-envios-table/{secret_key}', function ($secret_key) {
-    if ($secret_key !== 'pan_de_vida_2026_migrations') {
+    $configuredKey = env('DB_MIGRATIONS_KEY', 'pan_de_vida_2026_migrations');
+    if ($secret_key !== $configuredKey) {
         return response()->json([
             'success' => false,
             'message' => 'Acceso no autorizado'
@@ -139,3 +144,4 @@ Route::get('/fix-envios-table/{secret_key}', function ($secret_key) {
         ], 500);
     }
 });
+}

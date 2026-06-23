@@ -66,6 +66,11 @@ Route::middleware('checkauth')->group(function () {
         Route::get('/apartados/{apartado}/abonos/crear', [AbonoController::class, 'create'])->name('apartados.abonos.create');
         Route::post('/apartados/{apartado}/abonos', [AbonoController::class, 'store'])->name('apartados.abonos.store');
         Route::delete('/abonos/{abono}', [AbonoController::class, 'destroy'])->name('apartados.abonos.destroy');
+
+        // Pagos - Solo crear y eliminar pagos requiere Admin Librería
+        Route::get('/ventas/{venta}/pagos/crear', [PagoController::class, 'create'])->name('ventas.pagos.create');
+        Route::post('/ventas/{venta}/pagos', [PagoController::class, 'store'])->name('pagos.store');
+        Route::delete('/pagos/{pago}', [PagoController::class, 'destroy'])->name('pagos.destroy');
         
         // Sub-inventarios - Solo crear, editar, eliminar e importar requieren Admin Librería
         Route::get('/subinventarios/create', [SubInventarioController::class, 'create'])->name('subinventarios.create');
@@ -94,6 +99,15 @@ Route::middleware('checkauth')->group(function () {
         Route::put('/envios/{envio}', [EnvioController::class, 'update'])->name('envios.update');
         Route::delete('/envios/{envio}', [EnvioController::class, 'destroy'])->name('envios.destroy');
         Route::post('/envios-automaticos/generar-historicos', [EnvioController::class, 'generarHistoricos'])->name('envios.generar-historicos');
+
+        // Envíos automáticos - Solo Admin Librería
+        Route::get('/envios-automaticos/crear', [EnvioController::class, 'crearAutomatico'])->name('envios.crear-automatico');
+        Route::post('/envios-automaticos/store', [EnvioController::class, 'storeAutomatico'])->name('envios.store-automatico');
+
+        // Marcar estado de pago en envíos - Solo Admin Librería
+        Route::get('/envios/{envio}/marcar-pago', [EnvioController::class, 'mostrarFormularioPago'])->name('envios.mostrar-pago');
+        Route::post('/envios/{envio}/marcar-pagado', [EnvioController::class, 'marcarPagado'])->name('envios.marcar-pagado');
+        Route::post('/envios/{envio}/marcar-pendiente', [EnvioController::class, 'marcarPendiente'])->name('envios.marcar-pendiente');
         
         // Usuarios - Solo crear, editar requieren Admin Librería
         Route::get('/usuarios/create', [UsuarioController::class, 'create'])->name('usuarios.create');
@@ -102,10 +116,6 @@ Route::middleware('checkauth')->group(function () {
         Route::put('/usuarios/{usuario}', [UsuarioController::class, 'update'])->name('usuarios.update');
         Route::delete('/usuarios/{usuario}', [UsuarioController::class, 'destroy'])->name('usuarios.destroy');
     });
-
-    // Inventario - Rutas de lectura disponibles para todos
-    Route::get('/inventario', [InventarioController::class, 'index'])->name('inventario.index');
-    Route::get('/inventario/{inventario}', [InventarioController::class, 'show'])->name('inventario.show');
 
     // Inventario - Rutas de lectura disponibles para todos
     Route::get('/inventario', [InventarioController::class, 'index'])->name('inventario.index');
@@ -137,39 +147,21 @@ Route::middleware('checkauth')->group(function () {
     Route::get('/ventas-export/excel', [VentaController::class, 'exportExcel'])->name('ventas.export.excel');
     Route::get('/ventas-export/pdf', [VentaController::class, 'exportPdf'])->name('ventas.export.pdf');
     
-    // Rutas para exportar reportes de ventas - Disponibles para todos
-    Route::get('/ventas-export/excel', [VentaController::class, 'exportExcel'])->name('ventas.export.excel');
-    Route::get('/ventas-export/pdf', [VentaController::class, 'exportPdf'])->name('ventas.export.pdf');
-    
-    // Rutas de Usuarios - Disponibles para todos (solo lectura y edición de perfil)
-    Route::resource('usuarios', UsuarioController::class)->only(['index', 'show', 'edit', 'update']);
+    // Rutas de Usuarios - Disponibles para todos (solo lectura)
+    Route::resource('usuarios', UsuarioController::class)->only(['index', 'show']);
     
     // Clientes - Rutas de lectura disponibles para todos
     Route::get('/clientes', [ClienteController::class, 'index'])->name('clientes.index');
     Route::get('/clientes/search', [ClienteController::class, 'search'])->name('clientes.search'); // Debe ir ANTES del {cliente}
     Route::get('/clientes/{cliente}', [ClienteController::class, 'show'])->name('clientes.show');
     
-    // Rutas de pagos (dentro del módulo de ventas) - Disponibles para todos
-    Route::get('/ventas/{venta}/pagos/crear', [PagoController::class, 'create'])->name('ventas.pagos.create');
-    Route::post('/ventas/{venta}/pagos', [PagoController::class, 'store'])->name('pagos.store');
-    Route::delete('/pagos/{pago}', [PagoController::class, 'destroy'])->name('pagos.destroy');
-    
     // Envíos - Rutas de lectura disponibles para todos
     Route::get('/envios', [EnvioController::class, 'index'])->name('envios.index');
     Route::get('/envios/{envio}', [EnvioController::class, 'show'])->name('envios.show');
     
-    // Rutas para envíos automáticos - Disponibles para todos
-    Route::get('/envios-automaticos/crear', [EnvioController::class, 'crearAutomatico'])->name('envios.crear-automatico');
-    Route::post('/envios-automaticos/store', [EnvioController::class, 'storeAutomatico'])->name('envios.store-automatico');
-    
     // Rutas para exportar envío individual - Disponibles para todos
     Route::get('/envios/{envio}/export/excel', [EnvioController::class, 'exportIndividualExcel'])->name('envios.export-individual.excel');
     Route::get('/envios/{envio}/export/pdf', [EnvioController::class, 'exportIndividualPdf'])->name('envios.export-individual.pdf');
-    
-    // Rutas para marcar estado de pago en envíos - Disponibles para todos
-    Route::get('/envios/{envio}/marcar-pago', [EnvioController::class, 'mostrarFormularioPago'])->name('envios.mostrar-pago');
-    Route::post('/envios/{envio}/marcar-pagado', [EnvioController::class, 'marcarPagado'])->name('envios.marcar-pagado');
-    Route::post('/envios/{envio}/marcar-pendiente', [EnvioController::class, 'marcarPendiente'])->name('envios.marcar-pendiente');
     
     // Rutas para exportar reportes de envíos - Disponibles para todos
     Route::get('/envios-export/excel', [EnvioController::class, 'exportExcel'])->name('envios.export.excel');

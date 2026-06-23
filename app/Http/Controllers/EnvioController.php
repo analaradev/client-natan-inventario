@@ -256,11 +256,12 @@ class EnvioController extends Controller
 
         DB::beginTransaction();
         try {
+            $oldComprobante = null;
             // Subir nuevo comprobante si existe
             if ($request->hasFile('comprobante')) {
-                // Eliminar comprobante anterior si existe
+                // Guardar comprobante anterior si existe
                 if ($envio->comprobante) {
-                    Storage::disk('public')->delete($envio->comprobante);
+                    $oldComprobante = $envio->comprobante;
                 }
                 $validated['comprobante'] = $request->file('comprobante')->store('comprobantes/envios', 'public');
             }
@@ -287,6 +288,10 @@ class EnvioController extends Controller
 
             DB::commit();
 
+            if ($oldComprobante) {
+                Storage::disk('public')->delete($oldComprobante);
+            }
+
             return redirect()->route('envios.show', $envio)
                 ->with('success', 'Envío actualizado exitosamente');
 
@@ -302,6 +307,7 @@ class EnvioController extends Controller
      */
     public function destroy(Envio $envio)
     {
+        $oldComprobante = null;
         DB::beginTransaction();
         try {
             // Obtener las ventas asociadas antes de eliminar
@@ -309,7 +315,7 @@ class EnvioController extends Controller
             
             // Eliminar comprobante si existe
             if ($envio->comprobante) {
-                Storage::disk('public')->delete($envio->comprobante);
+                $oldComprobante = $envio->comprobante;
             }
 
             $envio->delete();
@@ -318,6 +324,10 @@ class EnvioController extends Controller
             // Solo eliminamos la asociación con este envío específico
             
             DB::commit();
+
+            if ($oldComprobante) {
+                Storage::disk('public')->delete($oldComprobante);
+            }
 
             return redirect()->route('envios.index')
                 ->with('success', 'Envío eliminado exitosamente');
@@ -602,13 +612,14 @@ class EnvioController extends Controller
             'referencia_pago' => 'nullable|string|max:255',
         ]);
 
+        $oldComprobante = null;
         DB::beginTransaction();
         try {
             // Subir comprobante de pago si existe
             if ($request->hasFile('comprobante_pago')) {
-                // Eliminar comprobante anterior si existe
+                // Guardar comprobante anterior si existe
                 if ($envio->comprobante_pago) {
-                    Storage::disk('public')->delete($envio->comprobante_pago);
+                    $oldComprobante = $envio->comprobante_pago;
                 }
                 
                 $path = $request->file('comprobante_pago')->store('comprobantes_pago', 'public');
@@ -623,6 +634,10 @@ class EnvioController extends Controller
             ]);
 
             DB::commit();
+
+            if ($oldComprobante) {
+                Storage::disk('public')->delete($oldComprobante);
+            }
 
             return redirect()
                 ->route('envios.show', $envio)
@@ -736,6 +751,7 @@ class EnvioController extends Controller
                 ->first();
             
             if ($envioExistente) {
+                DB::rollBack();
                 return back()->withErrors([
                     'error' => 'Ya existe un envío automático para este periodo (ID: ' . $envioExistente->id . ')'
                 ])->withInput();
@@ -749,6 +765,7 @@ class EnvioController extends Controller
                 ->get();
             
             if ($ventas->isEmpty()) {
+                DB::rollBack();
                 return back()->withErrors([
                     'error' => 'No hay ventas con envío pendientes en este periodo'
                 ])->withInput();
@@ -841,6 +858,7 @@ class EnvioController extends Controller
                 ->first();
 
             if (!$primeraVenta) {
+                DB::rollBack();
                 return response()->json([
                     'success' => false,
                     'message' => 'No hay ventas con envío en el sistema'

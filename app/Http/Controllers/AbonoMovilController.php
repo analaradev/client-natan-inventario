@@ -273,30 +273,20 @@ class AbonoMovilController extends Controller
 
         try {
             // Obtener el apartado
-            $apartado = Apartado::findOrFail($request->apartado_id);
+            $apartado = Apartado::whereKey($request->apartado_id)->lockForUpdate()->firstOrFail();
 
             // Verificar estado del apartado
             if ($apartado->estado === 'cancelado') {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'No se puede abonar a un apartado cancelado'
-                ], 400);
+                throw new \DomainException('No se puede abonar a un apartado cancelado');
             }
 
             if ($apartado->estado === 'liquidado') {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Este apartado ya está liquidado'
-                ], 400);
+                throw new \DomainException('Este apartado ya está liquidado');
             }
 
             // Verificar que el monto no exceda el saldo pendiente
             if ($request->monto > $apartado->saldo_pendiente) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'El monto del abono excede el saldo pendiente',
-                    'saldo_pendiente' => $apartado->saldo_pendiente
-                ], 400);
+                throw new \DomainException('El monto del abono excede el saldo pendiente');
             }
 
             // Guardar saldo anterior
@@ -318,9 +308,51 @@ class AbonoMovilController extends Controller
             // Actualizar saldo del apartado
             $apartado->saldo_pendiente = $saldoAnterior - $request->monto;
 
-            // Si el saldo llega a 0, marcar como liquidado
-            if ($apartado->saldo_pendiente <= 0) {
+            // Si el saldo llega a 0, liquidar automáticamente
+            if ($apartado->saldo_pendiente == 0) {
+                // 1. Crear la venta
+                $venta = \App\Models\Venta::create([
+                    'cliente_id' => $apartado->cliente_id,
+                    'apartado_id' => $apartado->id,
+                    'fecha_venta' => now(),
+                    'tipo_pago' => 'contado',
+                    'subtotal' => $apartado->monto_total,
+                    'descuento_global' => 0,
+                    'total' => $apartado->monto_total,
+                    'estado' => 'completada',
+                    'tiene_envio' => false,
+                    'costo_envio' => 0,
+                    'observaciones' => "Venta generada automáticamente al liquidar el apartado {$apartado->folio} desde app móvil",
+                    'usuario' => $request->usuario,
+                    'tipo_inventario' => $apartado->tipo_inventario,
+                    'subinventario_id' => $apartado->subinventario_id,
+                    'es_a_plazos' => false,
+                    'total_pagado' => $apartado->monto_total,
+                    'estado_pago' => 'completado',
+                ]);
+
+                // 2. Crear movimientos de salida
+                foreach ($apartado->detalles as $detalle) {
+                    \App\Models\Movimiento::create([
+                        'libro_id' => $detalle->libro_id,
+                        'venta_id' => $venta->id,
+                        'tipo_movimiento' => 'salida',
+                        'tipo_salida' => 'venta',
+                        'cantidad' => $detalle->cantidad,
+                        'precio_unitario' => $detalle->precio_unitario,
+                        'descuento' => $detalle->descuento,
+                        'fecha' => now(),
+                        'observaciones' => "Venta del apartado {$apartado->folio} (Móvil)",
+                        'usuario' => $request->usuario,
+                    ]);
+                }
+
+                // 3. Consumir el stock usando el servicio
+                app(\App\Services\InventoryStockService::class)->consumeApartado($apartado);
+
+                // 4. Cambiar estado del apartado y asociar venta
                 $apartado->estado = 'liquidado';
+                $apartado->venta_id = $venta->id;
             }
 
             $apartado->save();
@@ -347,6 +379,12 @@ class AbonoMovilController extends Controller
                     'apartado' => $this->formatearApartado($apartado)
                 ]
             ], 201);
+        } catch (\DomainException $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 400);
         } catch (\Exception $e) {
             DB::rollBack();
             

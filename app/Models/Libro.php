@@ -40,10 +40,17 @@ class Libro extends Model
     }
 
     /**
-     * Obtener el stock total (inventario general + subinventarios)
+     * Obtener el stock total (inventario general + subinventarios + apartados de subinventario)
      */
     public function getStockTotalAttribute()
     {
-        return $this->stock + ($this->stock_subinventario ?? 0);
+        $subinventarioReservado = (int) \DB::table('apartado_detalles as ad')
+            ->join('apartados as a', 'a.id', '=', 'ad.apartado_id')
+            ->where('ad.libro_id', $this->id)
+            ->where('a.tipo_inventario', 'subinventario')
+            ->where('a.estado', 'activo')
+            ->sum('ad.cantidad');
+
+        return $this->stock + ($this->stock_subinventario ?? 0) + $subinventarioReservado;
     }
 }

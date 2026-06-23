@@ -5,11 +5,16 @@ namespace App\Http\Controllers;
 use App\Models\Pago;
 use App\Models\Venta;
 use App\Models\Libro;
+use App\Services\InventoryStockService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class PagoController extends Controller
 {
+    public function __construct(private InventoryStockService $stockService)
+    {
+    }
+
     /**
      * Mostrar formulario para crear un nuevo pago
      */
@@ -106,6 +111,11 @@ class PagoController extends Controller
      */
     public function store(Request $request, Venta $venta)
     {
+        if (!$venta->es_a_plazos) {
+            return redirect()->route('ventas.show', $venta)
+                ->with('error', 'Solo se pueden registrar pagos en ventas a plazos');
+        }
+
         // Verificar que la venta no esté cancelada
         if ($venta->estado === 'cancelada') {
             return redirect()->route('ventas.show', $venta)
@@ -127,13 +137,16 @@ class PagoController extends Controller
 
         DB::beginTransaction();
         try {
+            $venta = Venta::whereKey($venta->id)->lockForUpdate()->firstOrFail();
+
+            if ($venta->estado === 'cancelada' || $venta->estado_pago === 'completado') {
+                throw new \DomainException('La venta ya no admite pagos');
+            }
 
             // Verificar que no exceda el total
             $nuevoTotal = $venta->total_pagado + $validated['monto'];
             if ($nuevoTotal > $venta->total) {
-                return back()->withErrors([
-                    'error' => 'El monto excede el saldo pendiente. Máximo: $' . number_format($venta->saldo_pendiente, 2)
-                ])->withInput();
+                throw new \DomainException('El monto excede el saldo pendiente. Máximo: $' . number_format($venta->saldo_pendiente, 2));
             }
 
             // Crear el pago (agregar venta_id)
@@ -141,13 +154,12 @@ class PagoController extends Controller
             $pago = Pago::create($validated);
 
             // Actualizar el estado de pago de la venta
+            $estadoAnterior = $venta->estado_pago;
             $venta->actualizarEstadoPago();
 
             // Si la venta se completó, descontar el stock
-            if ($venta->estado_pago === 'completado') {
-                foreach ($venta->movimientos as $movimiento) {
-                    $movimiento->libro->decrement('stock', $movimiento->cantidad);
-                }
+            if ($estadoAnterior !== 'completado' && $venta->estado_pago === 'completado') {
+                $this->stockService->deductSale($venta);
             }
 
             DB::commit();
@@ -162,6 +174,9 @@ class PagoController extends Controller
             return redirect()->route('ventas.pagos.create', $venta)
                 ->with('success', 'Pago registrado exitosamente. Saldo pendiente: $' . number_format($venta->fresh()->saldo_pendiente, 2));
 
+        } catch (\DomainException $e) {
+            DB::rollBack();
+            return back()->withErrors(['error' => $e->getMessage()])->withInput();
         } catch (\Exception $e) {
             DB::rollBack();
             return back()->withErrors(['error' => 'Error al registrar el pago: ' . $e->getMessage()])
@@ -181,7 +196,13 @@ class PagoController extends Controller
 
         DB::beginTransaction();
         try {
-            $venta = $pago->venta;
+            $venta = Venta::whereKey($pago->venta_id)->lockForUpdate()->firstOrFail();
+            
+            if ($venta->estado === 'cancelada') {
+                throw new \DomainException('No se pueden eliminar pagos de una venta cancelada');
+            }
+
+            $pago = Pago::whereKey($pago->id)->lockForUpdate()->firstOrFail();
             $estadoAnterior = $venta->estado_pago;
             
             // Eliminar el pago
@@ -192,34 +213,12 @@ class PagoController extends Controller
 
             // Si antes estaba completado y ahora no, restaurar el stock
             if ($estadoAnterior === 'completado' && $venta->estado_pago !== 'completado') {
-                foreach ($venta->movimientos as $movimiento) {
+                $this->stockService->restoreSale($venta);
+
+                foreach ($venta->movimientos()->where('tipo_movimiento', 'salida')->with('libro')->get() as $movimiento) {
                     $libro = $movimiento->libro;
-                    $libro->increment('stock', $movimiento->cantidad);
-                    
-                    // Verificar si la venta era de un subinventario
-                    $esDeSubinventario = false;
-                    $subinventarioId = null;
-                    if (preg_match('/SubInv #(\d+)/', $movimiento->observaciones, $matches)) {
-                        $esDeSubinventario = true;
-                        $subinventarioId = $matches[1];
-                        
-                        // Restaurar el stock en el subinventario
-                        $subinventario = \App\Models\SubInventario::find($subinventarioId);
-                        if ($subinventario) {
-                            $libroEnSub = $subinventario->libros()->where('libro_id', $libro->id)->first();
-                            if ($libroEnSub) {
-                                $subinventario->libros()->updateExistingPivot($libro->id, [
-                                    'cantidad' => $libroEnSub->pivot->cantidad + $movimiento->cantidad
-                                ]);
-                            } else {
-                                $subinventario->libros()->attach($libro->id, [
-                                    'cantidad' => $movimiento->cantidad
-                                ]);
-                            }
-                            
-                            $libro->increment('stock_subinventario', $movimiento->cantidad);
-                        }
-                    }
+                    $esDeSubinventario = $venta->tipo_inventario === 'subinventario' && $venta->subinventario_id;
+                    $subinventarioId = $venta->subinventario_id;
                     
                     // Registrar movimiento de entrada por eliminación de pago
                     $observaciones = 'Eliminación de pago en venta #' . $venta->id . ' (devuelto a pendiente)';
@@ -245,6 +244,9 @@ class PagoController extends Controller
 
             return back()->with('success', 'Pago eliminado exitosamente');
 
+        } catch (\DomainException $e) {
+            DB::rollBack();
+            return back()->with('error', $e->getMessage());
         } catch (\Exception $e) {
             DB::rollBack();
             return back()->withErrors(['error' => 'Error al eliminar el pago: ' . $e->getMessage()]);

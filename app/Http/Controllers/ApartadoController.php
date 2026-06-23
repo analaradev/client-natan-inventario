@@ -11,6 +11,7 @@ use App\Models\Movimiento;
 use App\Services\CodeGeneratorService;
 use App\Services\ExcelReportService;
 use App\Services\PdfReportService;
+use App\Services\InventoryStockService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
@@ -21,15 +22,18 @@ class ApartadoController extends Controller
     protected $codeGenerator;
     protected $excelReportService;
     protected $pdfReportService;
+    protected $stockService;
 
     public function __construct(
         CodeGeneratorService $codeGenerator,
         ExcelReportService $excelReportService,
-        PdfReportService $pdfReportService
+        PdfReportService $pdfReportService,
+        InventoryStockService $stockService
     ) {
         $this->codeGenerator = $codeGenerator;
         $this->excelReportService = $excelReportService;
         $this->pdfReportService = $pdfReportService;
+        $this->stockService = $stockService;
     }
 
     /**
@@ -138,7 +142,7 @@ class ApartadoController extends Controller
             'observaciones' => 'nullable|string',
             'libros' => 'required|array|min:1',
             'libros.*.libro_id' => 'required|exists:libros,id',
-            'libros.*.cantidad' => 'required|integer|min:0',
+            'libros.*.cantidad' => 'required|integer|min:1',
             'libros.*.precio_unitario' => 'required|numeric|min:0',
             'libros.*.descuento' => 'nullable|numeric|min:0|max:100',
         ], [
@@ -188,7 +192,13 @@ class ApartadoController extends Controller
                     }
                 } else {
                     // Verificar stock disponible en inventario general
-                    $stockDisponible = $libro->stock - $libro->stock_apartado - $libro->stock_subinventario;
+                    $reservadoGeneral = DB::table('apartado_detalles as ad')
+                        ->join('apartados as a', 'a.id', '=', 'ad.apartado_id')
+                        ->where('ad.libro_id', $libro->id)
+                        ->where('a.tipo_inventario', 'general')
+                        ->where('a.estado', 'activo')
+                        ->sum('ad.cantidad');
+                    $stockDisponible = $libro->stock - $reservadoGeneral;
                     if ($stockDisponible < $libroData['cantidad']) {
                         throw new \Exception("Stock insuficiente en inventario general para '{$libro->nombre}'. Disponible: {$stockDisponible}");
                     }
@@ -252,19 +262,9 @@ class ApartadoController extends Controller
                     'subtotal' => $subtotal,
                 ]);
 
-                // Incrementar stock_apartado
-                $libro->increment('stock_apartado', $libroData['cantidad']);
-
-                // Decrementar del inventario correspondiente
-                if ($tipoInventario === 'subinventario') {
-                    // Decrementar cantidad en subinventario
-                    DB::table('subinventario_libro')
-                        ->where('subinventario_id', $validated['subinventario_id'])
-                        ->where('libro_id', $libroData['libro_id'])
-                        ->decrement('cantidad', $libroData['cantidad']);
-                }
-                // Si es general, no hay que decrementar nada más (stock_apartado ya se incrementó)
             }
+
+            $this->stockService->reserveApartado($apartado);
 
             // Si hubo enganche, crear el primer abono
             if ($validated['enganche'] > 0) {
@@ -381,16 +381,15 @@ class ApartadoController extends Controller
      */
     public function liquidar(Apartado $apartado)
     {
-        if ($apartado->estado !== 'activo') {
-            return back()->with('error', 'Solo se pueden liquidar apartados activos');
-        }
-
-        if ($apartado->saldo_pendiente > 0) {
-            return back()->with('error', 'El apartado aún tiene saldo pendiente. Debe estar completamente pagado para liquidar.');
-        }
-
         DB::beginTransaction();
         try {
+            $apartado = Apartado::whereKey($apartado->id)->lockForUpdate()->firstOrFail();
+            if ($apartado->estado !== 'activo') {
+                throw new \DomainException('Solo se pueden liquidar apartados activos');
+            }
+            if ($apartado->saldo_pendiente > 0) {
+                throw new \DomainException('El apartado aún tiene saldo pendiente. Debe estar completamente pagado para liquidar.');
+            }
             Log::info('Iniciando liquidación de apartado', [
                 'apartado_id' => $apartado->id,
                 'apartado_folio' => $apartado->folio,
@@ -412,6 +411,8 @@ class ApartadoController extends Controller
                 'costo_envio' => 0,
                 'observaciones' => "Venta generada del apartado {$apartado->folio}",
                 'usuario' => Auth::user()->name ?? 'Sistema',
+                'tipo_inventario' => $apartado->tipo_inventario,
+                'subinventario_id' => $apartado->subinventario_id,
                 'es_a_plazos' => false,
                 'total_pagado' => $apartado->monto_total,
                 'estado_pago' => 'completado',
@@ -444,17 +445,9 @@ class ApartadoController extends Controller
                     'usuario' => Auth::user()->name ?? 'Sistema',
                 ]);
 
-                // Descontar del stock y del stock_apartado
-                $libro = $detalle->libro;
-                $libro->decrement('stock', $detalle->cantidad);
-                $libro->decrement('stock_apartado', $detalle->cantidad);
-
-                Log::info('Stock actualizado', [
-                    'libro_id' => $detalle->libro_id,
-                    'stock_nuevo' => $libro->fresh()->stock,
-                    'stock_apartado_nuevo' => $libro->fresh()->stock_apartado,
-                ]);
             }
+
+            $this->stockService->consumeApartado($apartado);
 
             // Actualizar apartado
             $apartado->update([
@@ -496,30 +489,14 @@ class ApartadoController extends Controller
      */
     public function cancelar(Apartado $apartado)
     {
-        if ($apartado->estado !== 'activo') {
-            return back()->with('error', 'Solo se pueden cancelar apartados activos');
-        }
-
         DB::beginTransaction();
         try {
-            // Liberar stock según tipo de inventario
-            foreach ($apartado->detalles as $detalle) {
-                // Decrementar stock_apartado
-                $detalle->libro->decrement('stock_apartado', $detalle->cantidad);
-
-                // Devolver al inventario correspondiente
-                if ($apartado->tipo_inventario === 'subinventario' && $apartado->subinventario_id) {
-                    // Devolver al subinventario
-                    DB::table('subinventario_libro')
-                        ->where('subinventario_id', $apartado->subinventario_id)
-                        ->where('libro_id', $detalle->libro_id)
-                        ->increment('cantidad', $detalle->cantidad);
-                } else {
-                    // Devolver al inventario general (no hace falta incrementar stock, 
-                    // solo decrementar stock_apartado libera el stock general automáticamente)
-                    // El stock disponible = stock - stock_apartado - stock_subinventario
-                }
+            $apartado = Apartado::whereKey($apartado->id)->lockForUpdate()->firstOrFail();
+            if ($apartado->estado !== 'activo') {
+                throw new \DomainException('Solo se pueden cancelar apartados activos');
             }
+
+            $this->stockService->releaseApartado($apartado);
 
             // Cambiar estado
             $apartado->update([
@@ -769,7 +746,7 @@ class ApartadoController extends Controller
                 'usuario' => 'required|string',
                 'libros' => 'required|array|min:1',
                 'libros.*.libro_id' => 'required|exists:libros,id',
-                'libros.*.cantidad' => 'required|integer|min:0',
+                'libros.*.cantidad' => 'required|integer|min:1',
                 'libros.*.precio_unitario' => 'required|numeric|min:0',
                 'libros.*.descuento' => 'nullable|numeric|min:0|max:100',
             ], [
@@ -805,6 +782,17 @@ class ApartadoController extends Controller
                         'message' => 'El punto de venta no está activo'
                     ], 422);
                 }
+
+                $tieneAsignacion = DB::table('subinventario_user')
+                    ->where('subinventario_id', $validated['subinventario_id'])
+                    ->where('cod_congregante', $validated['cod_congregante'])
+                    ->exists();
+                if (!$tieneAsignacion) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'El usuario no está asignado a este punto de venta'
+                    ], 403);
+                }
             } else {
                 $subinventario = null;
             }
@@ -836,7 +824,13 @@ class ApartadoController extends Controller
                     }
                 } else {
                     // Verificar stock disponible en inventario general
-                    $stockDisponible = $libro->stock - $libro->stock_apartado - $libro->stock_subinventario;
+                    $reservadoGeneral = DB::table('apartado_detalles as ad')
+                        ->join('apartados as a', 'a.id', '=', 'ad.apartado_id')
+                        ->where('ad.libro_id', $libro->id)
+                        ->where('a.tipo_inventario', 'general')
+                        ->where('a.estado', 'activo')
+                        ->sum('ad.cantidad');
+                    $stockDisponible = $libro->stock - $reservadoGeneral;
                     if ($stockDisponible < $libroData['cantidad']) {
                         throw new \Exception("Stock insuficiente en inventario general para '{$libro->nombre}'. Disponible: {$stockDisponible}");
                     }
@@ -901,22 +895,9 @@ class ApartadoController extends Controller
                     'subtotal' => $subtotal,
                 ]);
 
-                // Incrementar stock_apartado del libro
-                $libro->increment('stock_apartado', $libroData['cantidad']);
-
-                // Decrementar del inventario correspondiente
-                if ($tipoInventario === 'subinventario') {
-                    // Decrementar cantidad en subinventario
-                    DB::table('subinventario_libro')
-                        ->where('subinventario_id', $validated['subinventario_id'])
-                        ->where('libro_id', $libroData['libro_id'])
-                        ->decrement('cantidad', $libroData['cantidad']);
-                    $libro->decrement('stock_subinventario', $libroData['cantidad']);
-                } else {
-                    // Decrementar del stock general (ya se incrementó stock_apartado, así que el disponible se reduce automáticamente)
-                    // No es necesario hacer nada más porque stock_disponible = stock - stock_apartado - stock_subinventario
-                }
             }
+
+            $this->stockService->reserveApartado($apartado);
 
             // Si hubo enganche, crear el primer abono
             if ($validated['enganche'] > 0) {

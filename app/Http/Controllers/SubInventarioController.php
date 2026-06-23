@@ -109,6 +109,7 @@ class SubInventarioController extends Controller
                 $libro = Libro::findOrFail($item['libro_id']);
                 
                 if ($libro->stock < $item['cantidad']) {
+                    DB::rollBack();
                     return back()->withErrors([
                         'error' => "Stock en inventario general insuficiente para '{$libro->nombre}'. Stock disponible: {$libro->stock}"
                     ])->withInput();
@@ -118,9 +119,9 @@ class SubInventarioController extends Controller
             // Crear el sub-inventario
             $subinventario = SubInventario::create([
                 'fecha_subinventario' => $validated['fecha_subinventario'],
-                'descripcion' => $validated['descripcion'],
+                'descripcion' => $validated['descripcion'] ?? null,
                 'estado' => 'activo',
-                'observaciones' => $validated['observaciones'],
+                'observaciones' => $validated['observaciones'] ?? null,
                 'usuario' => 'Admin', // Cambiar por auth()->user()->name
             ]);
 
@@ -235,26 +236,35 @@ class SubInventarioController extends Controller
 
         DB::beginTransaction();
         try {
+            $subinventario = SubInventario::whereKey($subinventario->id)->lockForUpdate()->firstOrFail();
+            
+            if ($subinventario->estado !== 'activo') {
+                throw new \DomainException('Solo se pueden editar sub-inventarios activos');
+            }
+
+            $librosActuales = $subinventario->libros()->lockForUpdate()->get();
+
             // Validar stock ANTES de hacer cambios, considerando lo que ya tiene este subinventario
             foreach ($validated['libros'] as $item) {
-                $libro = Libro::findOrFail($item['libro_id']);
+                $libro = Libro::whereKey($item['libro_id'])->lockForUpdate()->firstOrFail();
                 
                 // Cantidad actual de este libro en este subinventario
-                $cantidadActualEnSub = $subinventario->libros->where('id', $item['libro_id'])->first()?->pivot->cantidad ?? 0;
+                $libroActual = $librosActuales->firstWhere('id', $item['libro_id']);
+                $cantidadActualEnSub = $libroActual ? $libroActual->pivot->cantidad : 0;
                 
                 // Stock disponible = stock en inventario general + lo que ya tiene este subinventario
                 $stockDisponible = $libro->stock + $cantidadActualEnSub;
                 
                 if ($stockDisponible < $item['cantidad']) {
-                    DB::rollBack();
-                    return back()->withErrors([
-                        'error' => "Stock disponible insuficiente para '{$libro->nombre}'. Stock disponible: {$stockDisponible}"
-                    ])->withInput();
+                    throw new \DomainException("Stock disponible insuficiente para '{$libro->nombre}'. Stock disponible: {$stockDisponible}");
                 }
             }
             
             // Primero devolver el stock de los libros actuales al inventario general
-            foreach ($subinventario->libros as $libro) {
+            foreach ($librosActuales as $libro) {
+                if ($libro->pivot->cantidad <= 0) {
+                    continue;
+                }
                 $libro->increment('stock', $libro->pivot->cantidad);
                 $libro->decrement('stock_subinventario', $libro->pivot->cantidad);
 
@@ -274,8 +284,8 @@ class SubInventarioController extends Controller
             // Actualizar el sub-inventario
             $subinventario->update([
                 'fecha_subinventario' => $validated['fecha_subinventario'],
-                'descripcion' => $validated['descripcion'],
-                'observaciones' => $validated['observaciones'],
+                'descripcion' => $validated['descripcion'] ?? null,
+                'observaciones' => $validated['observaciones'] ?? null,
             ]);
 
             // Desasociar libros anteriores
@@ -287,8 +297,12 @@ class SubInventarioController extends Controller
                     'cantidad' => $item['cantidad']
                 ]);
 
+                if ($item['cantidad'] <= 0) {
+                    continue;
+                }
+
                 // Restar del inventario general e incrementar contador de subinventarios
-                $libro = Libro::findOrFail($item['libro_id']);
+                $libro = Libro::whereKey($item['libro_id'])->lockForUpdate()->firstOrFail();
                 $libro->decrement('stock', $item['cantidad']);
                 $libro->increment('stock_subinventario', $item['cantidad']);
 
@@ -310,6 +324,9 @@ class SubInventarioController extends Controller
             return redirect()->route('subinventarios.show', $subinventario)
                 ->with('success', 'Sub-inventario actualizado exitosamente');
 
+        } catch (\DomainException $e) {
+            DB::rollBack();
+            return back()->withErrors(['error' => $e->getMessage()])->withInput();
         } catch (\Exception $e) {
             DB::rollBack();
             return back()->withErrors(['error' => 'Error al actualizar el sub-inventario: ' . $e->getMessage()])
@@ -329,9 +346,19 @@ class SubInventarioController extends Controller
 
         DB::beginTransaction();
         try {
+            $subinventario = SubInventario::whereKey($subinventario->id)->lockForUpdate()->firstOrFail();
+
+            if ($subinventario->estado === 'completado') {
+                throw new \DomainException('No se pueden eliminar sub-inventarios completados');
+            }
+
             // Si está activo, devolver el stock al inventario general
             if ($subinventario->estado === 'activo') {
-                foreach ($subinventario->libros as $libro) {
+                $librosActuales = $subinventario->libros()->lockForUpdate()->get();
+                foreach ($librosActuales as $libro) {
+                    if ($libro->pivot->cantidad <= 0) {
+                        continue;
+                    }
                     $libro->increment('stock', $libro->pivot->cantidad);
                     $libro->decrement('stock_subinventario', $libro->pivot->cantidad);
 
@@ -355,6 +382,9 @@ class SubInventarioController extends Controller
             return redirect()->route('subinventarios.index')
                 ->with('success', 'Sub-inventario eliminado exitosamente');
 
+        } catch (\DomainException $e) {
+            DB::rollBack();
+            return back()->with('error', $e->getMessage());
         } catch (\Exception $e) {
             DB::rollBack();
             return back()->with('error', 'Error al eliminar el sub-inventario: ' . $e->getMessage());
@@ -377,18 +407,24 @@ class SubInventarioController extends Controller
 
         DB::beginTransaction();
         try {
-            $libro = $subinventario->libros()->where('libro_id', $validated['libro_id'])->first();
+            $subinventario = SubInventario::whereKey($subinventario->id)->lockForUpdate()->firstOrFail();
+            
+            if ($subinventario->estado !== 'activo') {
+                throw new \DomainException('Este sub-inventario no está activo');
+            }
+
+            $libroModel = Libro::whereKey($validated['libro_id'])->lockForUpdate()->firstOrFail();
+            $libro = $subinventario->libros()->where('libro_id', $validated['libro_id'])->lockForUpdate()->first();
             
             if (!$libro) {
-                return back()->with('error', 'Este libro no está en el sub-inventario');
+                throw new \DomainException('Este libro no está en el sub-inventario');
             }
 
             if ($validated['cantidad'] > $libro->pivot->cantidad) {
-                return back()->with('error', 'La cantidad a devolver es mayor a la cantidad en sub-inventario');
+                throw new \DomainException('La cantidad a devolver es mayor a la cantidad en sub-inventario');
             }
 
             // Devolver al stock general
-            $libroModel = Libro::findOrFail($validated['libro_id']);
             $libroModel->increment('stock', $validated['cantidad']);
             $libroModel->decrement('stock_subinventario', $validated['cantidad']);
 
@@ -414,6 +450,9 @@ class SubInventarioController extends Controller
 
             return back()->with('success', "Stock devuelto exitosamente. Nueva cantidad en sub-inventario: {$nuevaCantidad}.");
 
+        } catch (\DomainException $e) {
+            DB::rollBack();
+            return back()->with('error', $e->getMessage());
         } catch (\Exception $e) {
             DB::rollBack();
             return back()->with('error', 'Error al devolver el stock: ' . $e->getMessage());
@@ -515,8 +554,13 @@ class SubInventarioController extends Controller
             ], 200);
         }
 
-        // Vendedores: Todos los subinventarios activos (sin inventario general)
+        // Vendedores: solo sus subinventarios activos (sin inventario general)
         $subinventarios = SubInventario::where('estado', 'activo')
+            ->whereIn('id', function($query) use ($codCongregante) {
+                $query->select('subinventario_id')
+                    ->from('subinventario_user')
+                    ->where('cod_congregante', $codCongregante);
+            })
             ->get(['id', 'descripcion', 'fecha_subinventario', 'estado', 'observaciones'])
             ->map(function($subinventario) {
                 $stats = DB::table('subinventario_libro')
@@ -652,8 +696,18 @@ class SubInventarioController extends Controller
      */
     public function apiMisLibrosDisponibles(Request $request, $codCongregante)
     {
-        // 1. Obtener IDs de todos los subinventarios activos (para todos los usuarios)
-        $subinventariosIds = SubInventario::where('estado', 'activo')->pluck('id');
+        $esAdmin = $this->hasAdminAccess($request);
+        if ($esAdmin) {
+            // Admin y Supervisor ven todos los subinventarios activos
+            $subinventariosIds = SubInventario::where('estado', 'activo')->pluck('id');
+        } else {
+            // Vendedores ven solo sus subinventarios activos
+            $subinventariosIds = DB::table('subinventario_user')
+                ->join('subinventarios', 'subinventario_user.subinventario_id', '=', 'subinventarios.id')
+                ->where('subinventario_user.cod_congregante', $codCongregante)
+                ->where('subinventarios.estado', 'activo')
+                ->pluck('subinventario_user.subinventario_id');
+        }
 
         if ($subinventariosIds->isEmpty()) {
             return response()->json([
@@ -694,19 +748,30 @@ class SubInventarioController extends Controller
         }
 
         // 4. Agrupar por libro y sumar cantidades de todos los subinventarios
-        $query->select(
-            'libros.id',
-            'libros.nombre',
-            'libros.codigo_barras',
-            'libros.precio',
-            DB::raw('SUM(subinventario_libro.cantidad) as cantidad_total_disponible'),
-            DB::raw('GROUP_CONCAT(DISTINCT CONCAT(subinventarios.id, ":", subinventario_libro.cantidad) SEPARATOR "|") as subinventarios_detalle')
-        )
-        ->groupBy('libros.id', 'libros.nombre', 'libros.codigo_barras', 'libros.precio');
+        if (DB::getDriverName() === 'sqlite') {
+            $query->select(
+                'libros.id',
+                'libros.nombre',
+                'libros.codigo_barras',
+                'libros.precio',
+                DB::raw('SUM(subinventario_libro.cantidad) as cantidad_total_disponible'),
+                DB::raw("group_concat(subinventarios.id || ':' || subinventario_libro.cantidad, '|') as subinventarios_detalle")
+            );
+        } else {
+            $query->select(
+                'libros.id',
+                'libros.nombre',
+                'libros.codigo_barras',
+                'libros.precio',
+                DB::raw('SUM(subinventario_libro.cantidad) as cantidad_total_disponible'),
+                DB::raw('GROUP_CONCAT(DISTINCT CONCAT(subinventarios.id, ":", subinventario_libro.cantidad) SEPARATOR "|") as subinventarios_detalle')
+            );
+        }
+        $query->groupBy('libros.id', 'libros.nombre', 'libros.codigo_barras', 'libros.precio');
 
         // 5. Ordenamiento
         $orderBy = $request->get('ordenar', 'nombre');
-        $orderDirection = $request->get('direccion', 'asc');
+        $orderDirection = strtolower($request->get('direccion', 'asc')) === 'desc' ? 'desc' : 'asc';
         
         $allowedOrderBy = ['nombre', 'precio', 'cantidad_total_disponible'];
         if (in_array($orderBy, $allowedOrderBy)) {
@@ -857,6 +922,24 @@ class SubInventarioController extends Controller
         }
 
         return is_array($roles) ? $roles : [];
+    }
+
+    /**
+     * Extrae el código de congregante desde query, body o header.
+     */
+    private function getCodCongreganteFromRequest(Request $request): ?string
+    {
+        $codCongregante = $request->query('cod_congregante')
+            ?? $request->input('cod_congregante')
+            ?? $request->header('X-Cod-Congregante');
+
+        if ($codCongregante === null) {
+            return null;
+        }
+
+        $codCongregante = trim((string) $codCongregante);
+
+        return $codCongregante !== '' ? $codCongregante : null;
     }
 
     /**
@@ -1241,7 +1324,7 @@ class SubInventarioController extends Controller
         // Validar parámetros
         $validated = $request->validate([
             'cod_congregante' => 'nullable|string|max:50',
-            'subinventario_id' => 'nullable|integer|exists:subinventarios,id',
+            'subinventario_id' => 'nullable|integer|min:0',
             'buscar' => 'nullable|string|max:255',
             'con_stock' => 'nullable|boolean',
             'precio_min' => 'nullable|numeric|min:0',
@@ -1251,7 +1334,54 @@ class SubInventarioController extends Controller
             'per_page' => 'nullable|integer|min:1|max:100'
         ]);
 
-        
+        $subinventarioId = isset($validated['subinventario_id'])
+            ? (int) $validated['subinventario_id']
+            : null;
+
+        if ($subinventarioId !== null && $subinventarioId > 0) {
+            $subinventarioValido = SubInventario::where('id', $subinventarioId)
+                ->where('estado', 'activo')
+                ->exists();
+
+            if (!$subinventarioValido) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Subinventario no encontrado o no activo'
+                ], 404);
+            }
+        }
+
+        if ($subinventarioId === 0 && !$this->hasAdminAccess($request)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No tienes acceso al inventario general. Solo Admin Librería y Supervisor.'
+            ], 403);
+        }
+
+        if ($subinventarioId !== null && $subinventarioId > 0 && !$this->hasAdminAccess($request)) {
+            $codCongregante = $this->getCodCongreganteFromRequest($request);
+
+            if (!$codCongregante) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Debe proporcionar el código del congregante.'
+                ], 422);
+            }
+
+            $tieneAsignacion = DB::table('subinventario_user')
+                ->join('subinventarios', 'subinventario_user.subinventario_id', '=', 'subinventarios.id')
+                ->where('subinventario_user.cod_congregante', $codCongregante)
+                ->where('subinventario_user.subinventario_id', $subinventarioId)
+                ->where('subinventarios.estado', 'activo')
+                ->exists();
+
+            if (!$tieneAsignacion) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No tienes acceso a este punto de venta.'
+                ], 403);
+            }
+        }
 
         // Query base para obtener todos los libros
         $query = Libro::query();
@@ -1285,7 +1415,7 @@ class SubInventarioController extends Controller
         $libros = $query->paginate($perPage);
 
         // Si se proporciona subinventario_id, agregar información de vendibilidad
-        $responseData = $libros->map(function($libro) use ($validated) {
+        $responseData = $libros->map(function($libro) use ($subinventarioId) {
             $data = [
                 'id' => $libro->id,
                 'nombre' => $libro->nombre,
@@ -1296,16 +1426,21 @@ class SubInventarioController extends Controller
             ];
 
             // Agregar información de vendibilidad si se proporciona subinventario
-            if (isset($validated['subinventario_id'])) {
-                // Buscar cantidad disponible en el subinventario específico
-                $cantidadEnSubinv = DB::table('subinventario_libro')
-                    ->where('subinventario_id', $validated['subinventario_id'])
-                    ->where('libro_id', $libro->id)
-                    ->where('cantidad', '>', 0)
-                    ->value('cantidad');
+            if ($subinventarioId !== null) {
+                if ($subinventarioId === 0) {
+                    $data['puede_vender'] = $libro->stock > 0;
+                    $data['cantidad_disponible_para_mi'] = (int) $libro->stock;
+                } else {
+                    // Buscar cantidad disponible en el subinventario específico
+                    $cantidadEnSubinv = DB::table('subinventario_libro')
+                        ->where('subinventario_id', $subinventarioId)
+                        ->where('libro_id', $libro->id)
+                        ->where('cantidad', '>', 0)
+                        ->value('cantidad');
 
-                $data['puede_vender'] = $cantidadEnSubinv > 0;
-                $data['cantidad_disponible_para_mi'] = (int)($cantidadEnSubinv ?? 0);
+                    $data['puede_vender'] = $cantidadEnSubinv > 0;
+                    $data['cantidad_disponible_para_mi'] = (int)($cantidadEnSubinv ?? 0);
+                }
             }
 
             return $data;
@@ -1326,15 +1461,19 @@ class SubInventarioController extends Controller
         ];
 
         // Si se proporcionó subinventario, agregar resumen
-        if (isset($validated['subinventario_id'])) {
+        if ($subinventarioId !== null) {
             $totalPuedeVender = $responseData->where('puede_vender', true)->count();
             $totalNoPuedeVender = $responseData->where('puede_vender', false)->count();
 
-            // Contar total de libros en el subinventario (sin filtros aplicados)
-            $totalLibrosEnSubinventario = DB::table('subinventario_libro')
-                ->where('subinventario_id', $validated['subinventario_id'])
-                ->where('cantidad', '>', 0)
-                ->count();
+            if ($subinventarioId === 0) {
+                $totalLibrosEnSubinventario = Libro::where('stock', '>', 0)->count();
+            } else {
+                // Contar total de libros en el subinventario (sin filtros aplicados)
+                $totalLibrosEnSubinventario = DB::table('subinventario_libro')
+                    ->where('subinventario_id', $subinventarioId)
+                    ->where('cantidad', '>', 0)
+                    ->count();
+            }
 
             // Contar total de libros en el sistema (sin filtros)
             $totalLibrosSistema = Libro::count();
@@ -1348,13 +1487,21 @@ class SubInventarioController extends Controller
             ];
 
             // Información del subinventario
-            $subinventario = SubInventario::find($validated['subinventario_id']);
-            if ($subinventario) {
+            if ($subinventarioId === 0) {
                 $response['subinventario_actual'] = [
-                    'id' => $subinventario->id,
-                    'descripcion' => $subinventario->descripcion,
-                    'estado' => $subinventario->estado
+                    'id' => 0,
+                    'descripcion' => 'Inventario General',
+                    'estado' => 'activo'
                 ];
+            } else {
+                $subinventario = SubInventario::find($subinventarioId);
+                if ($subinventario) {
+                    $response['subinventario_actual'] = [
+                        'id' => $subinventario->id,
+                        'descripcion' => $subinventario->descripcion,
+                        'estado' => $subinventario->estado
+                    ];
+                }
             }
         }
 
@@ -1477,8 +1624,7 @@ class SubInventarioController extends Controller
         try {
             // Leer el archivo
             $file = $request->file('archivo');
-            $reader = new \PhpOffice\PhpSpreadsheet\Reader\Xlsx();
-            $spreadsheet = $reader->load($file->getPathname());
+            $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($file->getPathname());
             $sheet = $spreadsheet->getActiveSheet();
             
             $librosAgregados = [];
@@ -1490,46 +1636,82 @@ class SubInventarioController extends Controller
                 $cantidad = $sheet->getCell('B' . $fila)->getValue();
                 
                 // Si no hay datos, saltar
-                if (empty($id) || empty($cantidad)) {
+                if (empty($id) || is_null($cantidad)) {
                     $fila++;
                     continue;
                 }
                 
-                // Buscar el libro por ID
-                $libro = Libro::find((int)$id);
-                
-                if (!$libro) {
-                    $errores[] = "Fila $fila: Libro con ID '$id' no encontrado";
-                    $fila++;
-                    continue;
+                try {
+                    DB::transaction(function () use ($subinventario, $id, $cantidad, &$librosAgregados, $fila) {
+                        // 1. Obtener y bloquear el subinventario
+                        $sub = SubInventario::whereKey($subinventario->id)->lockForUpdate()->firstOrFail();
+                        if ($sub->estado !== 'activo') {
+                            throw new \DomainException("El sub-inventario no está activo");
+                        }
+
+                        // 2. Obtener y bloquear el libro
+                        $libro = Libro::whereKey((int)$id)->lockForUpdate()->first();
+                        if (!$libro) {
+                            throw new \DomainException("Libro con ID '$id' no encontrado");
+                        }
+
+                        // 3. Validar cantidad
+                        if (!is_numeric($cantidad) || $cantidad < 1) {
+                            throw new \DomainException("Cantidad inválida ($cantidad)");
+                        }
+
+                        // 4. Validar stock disponible
+                        if ($libro->stock < $cantidad) {
+                            throw new \DomainException("Stock insuficiente para '{$libro->nombre}' (disponible: {$libro->stock})");
+                        }
+
+                        // 5. Verificar si el libro ya existe en el subinventario
+                        $existe = $sub->libros()->where('libro_id', $libro->id)->exists();
+                        if ($existe) {
+                            // Actualizar cantidad (sumar)
+                            $sub->libros()->updateExistingPivot($libro->id, [
+                                'cantidad' => DB::raw('cantidad + ' . $cantidad)
+                            ]);
+                        } else {
+                            // Agregar nuevo
+                            $sub->libros()->attach($libro->id, [
+                                'cantidad' => $cantidad
+                            ]);
+                        }
+
+                        // 6. Decrementar stock del inventario general
+                        $libro->decrement('stock', $cantidad);
+
+                        // 7. Actualizar el stock_subinventario del libro
+                        $totalEnSubinventarios = DB::table('subinventario_libro')
+                            ->where('libro_id', $libro->id)
+                            ->sum('cantidad');
+                        
+                        $libro->update([
+                            'stock_subinventario' => $totalEnSubinventarios
+                        ]);
+
+                        // 8. Registrar movimiento de inventario
+                        Movimiento::create([
+                            'libro_id' => $libro->id,
+                            'tipo_movimiento' => 'salida',
+                            'tipo_salida' => 'transferencia_subinventario',
+                            'cantidad' => $cantidad,
+                            'precio_unitario' => $libro->precio,
+                            'fecha' => now()->toDateString(),
+                            'observaciones' => "Envío por importación a sub-inventario #{$sub->id}: " . ($sub->descripcion ?? 'Sin descripción'),
+                            'usuario' => auth()->user()->name ?? 'Admin',
+                        ]);
+
+                        $librosAgregados[] = [
+                            'nombre' => $libro->nombre,
+                            'id' => $id,
+                            'cantidad' => $cantidad
+                        ];
+                    });
+                } catch (\Exception $e) {
+                    $errores[] = "Fila $fila: " . $e->getMessage();
                 }
-                
-                // Validar cantidad
-                if (!is_numeric($cantidad) || $cantidad < 1) {
-                    $errores[] = "Fila $fila: Cantidad inválida ($cantidad)";
-                    $fila++;
-                    continue;
-                }
-                
-                // Validar stock disponible
-                if ($libro->stock < $cantidad) {
-                    $errores[] = "Fila $fila: Stock insuficiente para '{$libro->nombre}' (disponible: {$libro->stock})";
-                    $fila++;
-                    continue;
-                }
-                
-                // Agregar o actualizar el libro en el subinventario
-                $this->agregarLibroAlSubinventario(
-                    $subinventario, 
-                    $libro->id, 
-                    (int)$cantidad
-                );
-                
-                $librosAgregados[] = [
-                    'nombre' => $libro->nombre,
-                    'id' => $id,
-                    'cantidad' => $cantidad
-                ];
                 
                 $fila++;
             }
@@ -1553,54 +1735,6 @@ class SubInventarioController extends Controller
             return redirect()->route('subinventarios.show', $subinventario)
                 ->with('error', 'Error al procesar el archivo: ' . $e->getMessage());
         }
-    }
-
-    /**
-     * Método auxiliar para agregar o actualizar un libro en el subinventario
-     */
-    private function agregarLibroAlSubinventario(SubInventario $subinventario, int $libroId, int $cantidad)
-    {
-        DB::transaction(function () use ($subinventario, $libroId, $cantidad) {
-            // Verificar si el libro ya existe en el subinventario
-            $existe = $subinventario->libros()->where('libro_id', $libroId)->exists();
-            
-            if ($existe) {
-                // Actualizar cantidad (sumar)
-                $subinventario->libros()->updateExistingPivot($libroId, [
-                    'cantidad' => DB::raw('cantidad + ' . $cantidad)
-                ]);
-            } else {
-                // Agregar nuevo
-                $subinventario->libros()->attach($libroId, [
-                    'cantidad' => $cantidad
-                ]);
-            }
-            
-            // Decrementar stock del inventario general
-            $libro = Libro::findOrFail($libroId);
-            $libro->decrement('stock', $cantidad);
-
-            // Actualizar el stock_subinventario del libro
-            $totalEnSubinventarios = DB::table('subinventario_libro')
-                ->where('libro_id', $libroId)
-                ->sum('cantidad');
-            
-            $libro->update([
-                'stock_subinventario' => $totalEnSubinventarios
-            ]);
-
-            // Registrar movimiento de inventario
-            Movimiento::create([
-                'libro_id' => $libro->id,
-                'tipo_movimiento' => 'salida',
-                'tipo_salida' => 'transferencia_subinventario',
-                'cantidad' => $cantidad,
-                'precio_unitario' => $libro->precio,
-                'fecha' => now()->toDateString(),
-                'observaciones' => "Envío por importación a sub-inventario #{$subinventario->id}: " . ($subinventario->descripcion ?? 'Sin descripción'),
-                'usuario' => auth()->user()->name ?? 'Admin',
-            ]);
-        });
     }
 
     /**

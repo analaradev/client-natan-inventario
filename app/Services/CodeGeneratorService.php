@@ -186,7 +186,7 @@ class CodeGeneratorService
      * @param string $field Campo que contiene el código (default: 'folio' o 'codigo')
      * @return string Código generado (ej: AP-2025-0001)
      */
-    public function generateCode(string $modelClass, string $prefix, string $field = null): string
+    public function generateCode(string $modelClass, string $prefix, ?string $field = null): string
     {
         $modelClass = "App\\Models\\{$modelClass}";
         

@@ -145,10 +145,13 @@
 
         @foreach($ventas as $venta)
             @if($venta->movimientos->count() > 0)
-                <div style="margin-bottom: 20px; padding: 10px; background-color: #f9f9f9; border-left: 3px solid #3B82F6;">
+                <div style="margin-bottom: 20px; padding: 10px; background-color: {{ $venta->estado === 'cancelada' ? '#fee2e2' : '#f9f9f9' }}; border-left: 3px solid {{ $venta->estado === 'cancelada' ? '#ef4444' : '#3B82F6' }};">
                     <strong style="color: #1F2937;">Venta #{{ $venta->id }} - {{ $venta->fecha_venta->format('d/m/Y H:i') }}</strong> 
                     | Cliente: {{ $venta->cliente?->nombre ?: 'Sin cliente' }}
-                    | Total: <span style="color: #10B981; font-weight: bold;">${{ number_format($venta->total, 2) }}</span>
+                    | Total: <span style="color: {{ $venta->estado === 'cancelada' ? '#dc2626' : '#10B981' }}; font-weight: bold;">${{ number_format($venta->total, 2) }}</span>
+                    @if($venta->estado === 'cancelada')
+                        | <strong style="color: #DC2626;">(CANCELADA)</strong>
+                    @endif
                 </div>
 
                 <table style="margin-bottom: 20px; width: 100%; font-size: 11px;">

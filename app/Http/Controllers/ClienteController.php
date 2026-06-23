@@ -184,6 +184,12 @@ class ClienteController extends Controller
                 ->with('error', 'No se puede eliminar el cliente porque tiene ventas asociadas');
         }
 
+        // Verificar si el cliente tiene apartados asociados
+        if ($cliente->apartados()->count() > 0) {
+            return redirect()->route('clientes.index')
+                ->with('error', 'No se puede eliminar el cliente porque tiene apartados asociados');
+        }
+
         $cliente->delete();
 
         return redirect()->route('clientes.index')

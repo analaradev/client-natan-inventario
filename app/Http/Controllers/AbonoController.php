@@ -58,11 +58,14 @@ class AbonoController extends Controller
 
         DB::beginTransaction();
         try {
+            $apartado = Apartado::whereKey($apartado->id)->lockForUpdate()->firstOrFail();
+            if ($apartado->estado !== 'activo') {
+                throw new \DomainException('Solo se pueden registrar abonos en apartados activos');
+            }
+
             // Verificar que el abono no exceda el saldo
             if ($validated['monto'] > $apartado->saldo_pendiente) {
-                return back()->withErrors([
-                    'error' => 'El monto excede el saldo pendiente. Máximo: $' . number_format($apartado->saldo_pendiente, 2)
-                ])->withInput();
+                throw new \DomainException('El monto excede el saldo pendiente. Máximo: $' . number_format($apartado->saldo_pendiente, 2));
             }
 
             $saldoAnterior = $apartado->saldo_pendiente;
@@ -98,6 +101,9 @@ class AbonoController extends Controller
             return redirect()->route('apartados.abonos.create', $apartado)
                 ->with('success', 'Abono registrado exitosamente. Saldo pendiente: $' . number_format($apartadoActualizado->saldo_pendiente, 2));
 
+        } catch (\DomainException $e) {
+            DB::rollBack();
+            return back()->withErrors(['error' => $e->getMessage()])->withInput();
         } catch (\Exception $e) {
             DB::rollBack();
             return back()->withErrors(['error' => 'Error al registrar el abono: ' . $e->getMessage()])
@@ -110,21 +116,22 @@ class AbonoController extends Controller
      */
     public function destroy(Abono $abono)
     {
-        $apartado = $abono->apartado;
-
-        // Verificar que el apartado esté activo
-        if ($apartado->estado !== 'activo') {
-            return back()->with('error', 'No se pueden eliminar abonos de apartados liquidados o cancelados');
-        }
-
-        // Solo permitir eliminar el último abono
-        $ultimoAbono = $apartado->abonos()->latest()->first();
-        if ($abono->id !== $ultimoAbono->id) {
-            return back()->with('error', 'Solo se puede eliminar el último abono registrado');
-        }
-
         DB::beginTransaction();
         try {
+            // Obtener y bloquear el apartado correspondiente
+            $apartado = Apartado::whereKey($abono->apartado_id)->lockForUpdate()->firstOrFail();
+
+            // Verificar que el apartado esté activo
+            if ($apartado->estado !== 'activo') {
+                throw new \DomainException('No se pueden eliminar abonos de apartados liquidados o cancelados');
+            }
+
+            // Solo permitir eliminar el último abono
+            $ultimoAbono = $apartado->abonos()->latest('id')->first();
+            if (!$ultimoAbono || $abono->id !== $ultimoAbono->id) {
+                throw new \DomainException('Solo se puede eliminar el último abono registrado');
+            }
+
             // Eliminar el abono
             $abono->delete();
 
@@ -135,6 +142,9 @@ class AbonoController extends Controller
 
             return back()->with('success', 'Abono eliminado exitosamente. Saldo actualizado.');
 
+        } catch (\DomainException $e) {
+            DB::rollBack();
+            return back()->with('error', $e->getMessage());
         } catch (\Exception $e) {
             DB::rollBack();
             return back()->withErrors(['error' => 'Error al eliminar el abono: ' . $e->getMessage()]);
