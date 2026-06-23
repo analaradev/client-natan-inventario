@@ -652,17 +652,14 @@ class VentaController extends Controller
             // Restaurar el stock y registrar movimientos de entrada
             foreach ($venta->movimientos as $movimiento) {
                 $libro = $movimiento->libro;
-                $libro->increment('stock', $movimiento->cantidad);
                 
                 // Verificar si la venta era de un subinventario
-                $esDeSubinventario = false;
-                $subinventarioId = null;
-                if (preg_match('/SubInv #(\d+)/', $movimiento->observaciones, $matches)) {
-                    $esDeSubinventario = true;
-                    $subinventarioId = $matches[1];
-                    
+                $esDeSubinventario = ($venta->tipo_inventario === 'subinventario' && !is_null($venta->subinventario_id));
+                $subinventarioId = $venta->subinventario_id;
+                
+                if ($esDeSubinventario) {
                     // Restaurar el stock en el subinventario
-                    $subinventario = \App\Models\SubInventario::find($subinventarioId);
+                    $subinventario = $venta->subinventario;
                     if ($subinventario) {
                         $libroEnSub = $subinventario->libros()->where('libro_id', $libro->id)->first();
                         if ($libroEnSub) {
@@ -680,6 +677,9 @@ class VentaController extends Controller
                         // Incrementar stock_subinventario del libro
                         $libro->increment('stock_subinventario', $movimiento->cantidad);
                     }
+                } else {
+                    // Solo si NO es de subinventario, se devuelve a la bodega general (stock)
+                    $libro->increment('stock', $movimiento->cantidad);
                 }
                 
                 // Registrar movimiento de entrada por cancelación de venta

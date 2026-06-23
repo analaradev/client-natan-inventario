@@ -404,14 +404,15 @@ class SubInventarioController extends Controller
                 'usuario' => auth()->user()->name ?? 'Admin',
             ]);
 
-            // Actualizar la cantidad a 0 en la tabla pivote (mantener el libro en la lista)
+            // Actualizar la cantidad en la tabla pivote restando lo devuelto
+            $nuevaCantidad = $libro->pivot->cantidad - $validated['cantidad'];
             $subinventario->libros()->updateExistingPivot($validated['libro_id'], [
-                'cantidad' => 0
+                'cantidad' => $nuevaCantidad
             ]);
 
             DB::commit();
 
-            return back()->with('success', 'Stock devuelto exitosamente. La cantidad se ha puesto a 0.');
+            return back()->with('success', "Stock devuelto exitosamente. Nueva cantidad en sub-inventario: {$nuevaCantidad}.");
 
         } catch (\Exception $e) {
             DB::rollBack();
