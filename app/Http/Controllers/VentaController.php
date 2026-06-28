@@ -10,6 +10,7 @@ use App\Services\CodeGeneratorService;
 use App\Services\ExcelReportService;
 use App\Services\PdfReportService;
 use App\Services\InventoryStockService;
+use App\Services\IngresoCajaService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -23,17 +24,20 @@ class VentaController extends Controller
     protected $excelReportService;
     protected $pdfReportService;
     protected $stockService;
+    protected $ingresoCajaService;
 
     public function __construct(
         CodeGeneratorService $codeGenerator,
         ExcelReportService $excelReportService,
         PdfReportService $pdfReportService,
-        InventoryStockService $stockService
+        InventoryStockService $stockService,
+        IngresoCajaService $ingresoCajaService
     ) {
         $this->codeGenerator = $codeGenerator;
         $this->excelReportService = $excelReportService;
         $this->pdfReportService = $pdfReportService;
         $this->stockService = $stockService;
+        $this->ingresoCajaService = $ingresoCajaService;
     }
 
     /**
@@ -253,13 +257,14 @@ class VentaController extends Controller
                 'subinventario_id' => 'nullable|required_if:tipo_inventario,subinventario|exists:subinventarios,id',
                 'cliente_id' => 'nullable|exists:clientes,id',
                 'fecha_venta' => 'required|date',
-                'tipo_pago' => 'required|in:contado,credito,mixto',
+                'tipo_pago' => 'nullable|in:contado,credito,mixto',
+                'metodo_pago' => 'nullable|in:efectivo,tarjeta,transferencia,no_especificado',
                 'descuento_global' => 'nullable|numeric|min:0|max:100',
                 'observaciones' => 'nullable|string|max:500',
                 'es_a_plazos' => 'nullable|boolean',
                 'tiene_envio' => 'nullable|boolean',
                 'costo_envio' => 'nullable|numeric|min:0',
-                'fecha_limite' => 'nullable|date|after:today',
+                'fecha_limite' => 'nullable|date',
                 
                 // Movimientos
                 'libros' => 'required|array|min:1',
@@ -271,10 +276,8 @@ class VentaController extends Controller
                 'tipo_inventario.required' => 'Debes seleccionar el tipo de inventario',
                 'subinventario_id.required_if' => 'Debes seleccionar un subinventario',
                 'fecha_venta.required' => 'La fecha de venta es obligatoria',
-                'tipo_pago.required' => 'Debes seleccionar el tipo de pago',
                 'libros.required' => 'Debes agregar al menos un libro a la venta',
                 'libros.min' => 'Debes agregar al menos un libro a la venta',
-                'fecha_limite.after' => 'La fecha límite debe ser posterior a hoy',
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             // Rethrow para que se maneje normalmente
@@ -283,7 +286,8 @@ class VentaController extends Controller
 
         DB::beginTransaction();
         try {
-            $esAPLazos = isset($validated['es_a_plazos']) && $validated['es_a_plazos'];
+            $esAPLazos = false;
+            $validated['tipo_pago'] = 'contado';
             $tipoInventario = $validated['tipo_inventario'];
             $subinventarioId = $validated['subinventario_id'] ?? null;
             
@@ -307,18 +311,19 @@ class VentaController extends Controller
             $venta = Venta::create([
                 'cliente_id' => $validated['cliente_id'],
                 'fecha_venta' => $validated['fecha_venta'],
-                'tipo_pago' => $validated['tipo_pago'],
+                'tipo_pago' => 'contado',
+                'metodo_pago' => $validated['metodo_pago'] ?? 'no_especificado',
                 'descuento_global' => $validated['descuento_global'] ?? 0,
                 'estado' => 'completada',
                 'observaciones' => $validated['observaciones'] ?? '',
                 'usuario' => session('username'),
                 'tipo_inventario' => $tipoInventario,
                 'subinventario_id' => $subinventarioId,
-                'es_a_plazos' => $esAPLazos,
+                'es_a_plazos' => false,
                 'tiene_envio' => isset($validated['tiene_envio']) && $validated['tiene_envio'],
                 'costo_envio' => isset($validated['tiene_envio']) && $validated['tiene_envio'] ? ($validated['costo_envio'] ?? 0) : 0,
-                'fecha_limite' => $validated['fecha_limite'] ?? null,
-                'estado_pago' => $esAPLazos ? 'pendiente' : 'completado',
+                'fecha_limite' => null,
+                'estado_pago' => 'completado',
                 'total_pagado' => 0,
             ]);
 
@@ -355,11 +360,9 @@ class VentaController extends Controller
             // Calcular y actualizar totales de la venta
             $venta->actualizarTotales();
             
-            // Si NO es a plazos, marcar como completamente pagada
-            if (!$esAPLazos) {
-                $venta->total_pagado = $venta->total;
-                $venta->save();
-            }
+            $venta->total_pagado = $venta->total;
+            $venta->save();
+            $this->ingresoCajaService->registrarVenta($venta);
 
             DB::commit();
 
@@ -453,13 +456,14 @@ class VentaController extends Controller
         $validated = $request->validate([
             'cliente_id' => 'nullable|exists:clientes,id',
             'fecha_venta' => 'required|date',
-            'tipo_pago' => 'required|in:contado,credito,mixto',
+            'tipo_pago' => 'nullable|in:contado,credito,mixto',
+            'metodo_pago' => 'nullable|in:efectivo,tarjeta,transferencia,no_especificado',
             'observaciones' => 'nullable|string|max:500',
             'descuento_global' => 'nullable|numeric|min:0|max:100',
             'es_a_plazos' => 'nullable|boolean',
             'tiene_envio' => 'nullable|boolean',
             'costo_envio' => 'nullable|numeric|min:0',
-            'fecha_limite' => 'nullable|date|after:today',
+            'fecha_limite' => 'nullable|date',
             
             // Movimientos
             'libros' => 'required|array|min:1',
@@ -469,16 +473,15 @@ class VentaController extends Controller
             'libros.*.precio_custom' => 'nullable|numeric|min:0',
         ], [
             'fecha_venta.required' => 'La fecha de venta es obligatoria',
-            'tipo_pago.required' => 'Debes seleccionar el tipo de pago',
             'libros.required' => 'Debes agregar al menos un libro a la venta',
             'libros.min' => 'Debes agregar al menos un libro a la venta',
-            'fecha_limite.after' => 'La fecha límite debe ser posterior a hoy',
         ]);
 
         DB::beginTransaction();
         try {
             $venta = Venta::whereKey($venta->id)->lockForUpdate()->firstOrFail();
-            $esAPLazos = isset($validated['es_a_plazos']) && $validated['es_a_plazos'];
+            $esAPLazos = false;
+            $validated['tipo_pago'] = 'contado';
 
             if ($esAPLazos) {
                 throw new \DomainException('No se puede convertir una venta existente en venta a plazos. Registra una nueva venta.');
@@ -555,18 +558,21 @@ class VentaController extends Controller
             $venta->update([
                 'cliente_id' => $validated['cliente_id'],
                 'fecha_venta' => $validated['fecha_venta'],
-                'tipo_pago' => $validated['tipo_pago'],
+                'tipo_pago' => 'contado',
+                'metodo_pago' => $validated['metodo_pago'] ?? $venta->metodo_pago ?? 'no_especificado',
                 'subtotal' => $subtotal,
                 'descuento_global' => $descuentoGlobal,
                 'total' => $total,
-                'total_pagado' => $esAPLazos ? $venta->calcularTotalPagado() : $total,
+                'total_pagado' => $total,
                 'observaciones' => $validated['observaciones'] ?? '',
-                'es_a_plazos' => $esAPLazos,
+                'es_a_plazos' => false,
                 'tiene_envio' => isset($validated['tiene_envio']) && $validated['tiene_envio'],
                 'costo_envio' => $costoEnvio,
-                'fecha_limite' => $validated['fecha_limite'] ?? null,
-                'estado_pago' => $esAPLazos ? 'pendiente' : 'completado',
+                'fecha_limite' => null,
+                'estado_pago' => 'completado',
             ]);
+
+            $this->ingresoCajaService->registrarVenta($venta->fresh());
 
             DB::commit();
 
@@ -669,6 +675,7 @@ class VentaController extends Controller
             }
 
             $venta->update(['estado' => 'cancelada']);
+            $this->ingresoCajaService->cancelarPorVenta($venta);
 
             DB::commit();
 
@@ -1038,7 +1045,8 @@ class VentaController extends Controller
             'cod_congregante' => 'required|string', // Para validar acceso
             'cliente_id' => 'nullable|exists:clientes,id',
             'fecha_venta' => 'required|date',
-            'tipo_pago' => 'required|in:contado,credito,mixto',
+            'tipo_pago' => 'nullable|in:contado,credito,mixto',
+            'metodo_pago' => 'nullable|in:efectivo,tarjeta,transferencia,no_especificado',
             'descuento_global' => 'nullable|numeric|min:0|max:100',
             'observaciones' => 'nullable|string|max:500',
             'usuario' => 'required|string',
@@ -1059,11 +1067,11 @@ class VentaController extends Controller
             'cod_congregante.required' => 'Token de usuario requerido',
             'libros.required' => 'Debes agregar al menos un libro',
             'libros.min' => 'Debes agregar al menos un libro',
-            'tipo_pago.required' => 'Debes seleccionar un tipo de pago',
         ]);
         DB::beginTransaction();
         try {
             $codCongreganteValidado = $request->attributes->get('validated_cod_congregante', $validated['cod_congregante']);
+            $validated['tipo_pago'] = 'contado';
 
             // 1. Bloquear y validar stock del subinventario antes de crear la venta.
             $stockLocks = $this->lockAndValidateSubinventarioStock(
@@ -1071,11 +1079,6 @@ class VentaController extends Controller
                 $validated['libros']
             );
             $subinventario = $stockLocks['subinventario'];
-
-            // 4. VALIDAR CLIENTE SI ES REQUERIDO
-            if ($validated['tipo_pago'] === 'credito' && empty($validated['cliente_id'])) {
-                throw new \DomainException('Las ventas a crédito requieren un cliente asignado');
-            }
 
             // 5. VALIDAR ENVÍO
             $tieneEnvio = isset($validated['tiene_envio']) && $validated['tiene_envio'];
@@ -1085,17 +1088,18 @@ class VentaController extends Controller
             $venta = Venta::create([
                 'cliente_id' => $validated['cliente_id'] ?? null,
                 'fecha_venta' => $validated['fecha_venta'],
-                'tipo_pago' => $validated['tipo_pago'],
+                'tipo_pago' => 'contado',
+                'metodo_pago' => $validated['metodo_pago'] ?? 'no_especificado',
                 'descuento_global' => $validated['descuento_global'] ?? 0,
                 'estado' => 'completada',
                 'observaciones' => $validated['observaciones'] ?? 'Venta desde app móvil',
                 'usuario' => $validated['usuario'],
                 'tipo_inventario' => 'subinventario',
                 'subinventario_id' => $validated['subinventario_id'],
-                'es_a_plazos' => $validated['tipo_pago'] === 'credito',
+                'es_a_plazos' => false,
                 'tiene_envio' => $tieneEnvio,
                 'costo_envio' => $costoEnvio,
-                'estado_pago' => $validated['tipo_pago'] === 'credito' ? 'pendiente' : 'completado',
+                'estado_pago' => 'completado',
                 'total_pagado' => 0,
             ]);
 
@@ -1122,10 +1126,7 @@ class VentaController extends Controller
             // 8. CALCULAR TOTALES
             $venta->actualizarTotales();
             
-            // Si es al contado o mixto, marcar como pagado
-            if ($validated['tipo_pago'] === 'contado' || $validated['tipo_pago'] === 'mixto') {
-                $venta->total_pagado = $venta->total;
-            }
+            $venta->total_pagado = $venta->total;
             
             $venta->save();
 
@@ -1140,6 +1141,8 @@ class VentaController extends Controller
                 $venta->observaciones = ($venta->observaciones ?? '') . $observacionesEnvio;
                 $venta->save();
             }
+
+            $this->ingresoCajaService->registrarVenta($venta);
 
             DB::commit();
 
@@ -1324,7 +1327,8 @@ class VentaController extends Controller
             'subinventario_id' => 'nullable|required_if:tipo_inventario,subinventario|exists:subinventarios,id',
             'cliente_id' => 'nullable|exists:clientes,id',
             'fecha_venta' => 'required|date',
-            'tipo_pago' => 'required|in:contado,credito,mixto',
+            'tipo_pago' => 'nullable|in:contado,credito,mixto',
+            'metodo_pago' => 'nullable|in:efectivo,tarjeta,transferencia,no_especificado',
             'descuento_global' => 'nullable|numeric|min:0|max:100',
             'observaciones' => 'nullable|string|max:500',
             'usuario' => 'required|string',
@@ -1343,14 +1347,11 @@ class VentaController extends Controller
             'subinventario_id.required_if' => 'Debes seleccionar un subinventario',
             'libros.required' => 'Debes agregar al menos un libro',
             'libros.min' => 'Debes agregar al menos un libro',
-            'tipo_pago.required' => 'Debes seleccionar un tipo de pago',
         ]);
         DB::beginTransaction();
 
         try {
-            if ($validated['tipo_pago'] === 'credito' && empty($validated['cliente_id'])) {
-                throw new \DomainException('Las ventas a crédito requieren un cliente asignado');
-            }
+            $validated['tipo_pago'] = 'contado';
 
             $tieneEnvio = isset($validated['tiene_envio']) && $validated['tiene_envio'];
             $costoEnvio = $tieneEnvio ? ($validated['costo_envio'] ?? 0) : 0;
@@ -1371,17 +1372,18 @@ class VentaController extends Controller
             $venta = Venta::create([
                 'cliente_id' => $validated['cliente_id'] ?? null,
                 'fecha_venta' => $validated['fecha_venta'],
-                'tipo_pago' => $validated['tipo_pago'],
+                'tipo_pago' => 'contado',
+                'metodo_pago' => $validated['metodo_pago'] ?? 'no_especificado',
                 'descuento_global' => $validated['descuento_global'] ?? 0,
                 'estado' => 'completada',
                 'observaciones' => $validated['observaciones'] ?? 'Venta desde app móvil (Admin)',
                 'usuario' => $validated['usuario'],
                 'tipo_inventario' => $tipoInventario,
                 'subinventario_id' => $tipoInventario === 'subinventario' ? $validated['subinventario_id'] : null,
-                'es_a_plazos' => $validated['tipo_pago'] === 'credito',
+                'es_a_plazos' => false,
                 'tiene_envio' => $tieneEnvio,
                 'costo_envio' => $costoEnvio,
-                'estado_pago' => $validated['tipo_pago'] === 'credito' ? 'pendiente' : 'completado',
+                'estado_pago' => 'completado',
                 'total_pagado' => 0,
             ]);
 
@@ -1405,9 +1407,7 @@ class VentaController extends Controller
 
             $venta->actualizarTotales();
 
-            if ($validated['tipo_pago'] === 'contado' || $validated['tipo_pago'] === 'mixto') {
-                $venta->total_pagado = $venta->total;
-            }
+            $venta->total_pagado = $venta->total;
 
             if ($tieneEnvio && isset($validated['direccion_envio'])) {
                 $observacionesEnvio = "\n--- DATOS DE ENVÍO ---\n";
@@ -1419,6 +1419,8 @@ class VentaController extends Controller
             }
 
             $venta->save();
+
+            $this->ingresoCajaService->registrarVenta($venta);
 
             DB::commit();
 

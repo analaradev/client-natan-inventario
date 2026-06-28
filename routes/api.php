@@ -70,6 +70,54 @@ if (app()->environment('local', 'testing')) {
     });
 }
 
+Route::get('/reparar-datos-produccion/{secret_key}', function ($secret_key) {
+    $configuredKey = env('PRODUCTION_REPAIR_KEY') ?: env('DB_MIGRATIONS_KEY');
+
+    if (empty($configuredKey) || !hash_equals($configuredKey, $secret_key)) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Acceso no autorizado',
+        ], 403);
+    }
+
+    if (request()->query('confirm') !== 'REPARAR') {
+        return response()->json([
+            'success' => false,
+            'message' => 'Ruta protegida. Para ejecutar la reparacion agrega ?confirm=REPARAR al final de la URL.',
+            'acciones' => [
+                'Sincroniza stock_subinventario y stock_apartado.',
+                'Corrige stock general negativo a 0.',
+                'Reconstruye ingresos de caja desde ventas, pagos y abonos historicos.',
+            ],
+        ], 409);
+    }
+
+    try {
+        \Illuminate\Support\Facades\Artisan::call('inventario:sincronizar');
+        $inventarioOutput = \Illuminate\Support\Facades\Artisan::output();
+
+        \Illuminate\Support\Facades\Artisan::call('caja:reconstruir-ingresos', [
+            '--force' => true,
+        ]);
+        $cajaOutput = \Illuminate\Support\Facades\Artisan::output();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Reparacion de datos completada correctamente.',
+            'output' => [
+                'inventario' => $inventarioOutput,
+                'caja' => $cajaOutput,
+            ],
+        ]);
+    } catch (\Throwable $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Error al reparar datos de produccion.',
+            'error' => $e->getMessage(),
+        ], 500);
+    }
+});
+
 // Operaciones destructivas disponibles únicamente en desarrollo local.
 if (app()->environment('local', 'testing')) {
 Route::get('/run-migrations/{secret_key}', function ($secret_key) {

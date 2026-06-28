@@ -152,19 +152,6 @@
                     </select>
                 </div>
 
-                <!-- Filtro por Tipo de Pago -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">
-                        <i class="fas fa-credit-card text-gray-400"></i> Tipo de Pago
-                    </label>
-                    <select name="tipo_pago" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
-                        <option value="">Todos</option>
-                        <option value="contado" {{ request('tipo_pago') === 'contado' ? 'selected' : '' }}>Contado</option>
-                        <option value="credito" {{ request('tipo_pago') === 'credito' ? 'selected' : '' }}>Crédito</option>
-                        <option value="mixto" {{ request('tipo_pago') === 'mixto' ? 'selected' : '' }}>Mixto</option>
-                    </select>
-                </div>
-
                 <!-- Filtro por Estado de Pago -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">

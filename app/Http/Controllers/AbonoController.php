@@ -4,12 +4,17 @@ namespace App\Http\Controllers;
 
 use App\Models\Abono;
 use App\Models\Apartado;
+use App\Services\IngresoCajaService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 
 class AbonoController extends Controller
 {
+    public function __construct(private IngresoCajaService $ingresoCajaService)
+    {
+    }
+
     /**
      * Mostrar formulario para crear un nuevo abono
      */
@@ -86,6 +91,7 @@ class AbonoController extends Controller
 
             // Actualizar saldo del apartado
             $apartado->actualizarSaldo();
+            $this->ingresoCajaService->registrarAbono($abono);
 
             DB::commit();
 
@@ -134,6 +140,7 @@ class AbonoController extends Controller
 
             // Eliminar el abono
             $abono->delete();
+            $this->ingresoCajaService->cancelarPorAbono($abono);
 
             // Recalcular saldo del apartado
             $apartado->actualizarSaldo();

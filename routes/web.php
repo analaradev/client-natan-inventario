@@ -13,6 +13,7 @@ use App\Http\Controllers\EnvioController;
 use App\Http\Controllers\SubInventarioController;
 use App\Http\Controllers\ApartadoController;
 use App\Http\Controllers\AbonoController;
+use App\Http\Controllers\CorteCajaController;
 
 // Rutas públicas de autenticación
 Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
@@ -34,6 +35,9 @@ Route::middleware('checkauth')->group(function () {
 
         Route::get('/clientes/create', [ClienteController::class, 'create'])->name('clientes.create');
         Route::post('/clientes', [ClienteController::class, 'store'])->name('clientes.store');
+
+        Route::get('/cortes/create', [CorteCajaController::class, 'create'])->name('cortes.create');
+        Route::post('/cortes', [CorteCajaController::class, 'store'])->name('cortes.store');
     });
 
     // Rutas que requieren Admin Librería
@@ -151,6 +155,14 @@ Route::middleware('checkauth')->group(function () {
     // Rutas para exportar reportes de ventas - Disponibles para todos
     Route::get('/ventas-export/excel', [VentaController::class, 'exportExcel'])->name('ventas.export.excel');
     Route::get('/ventas-export/pdf', [VentaController::class, 'exportPdf'])->name('ventas.export.pdf');
+
+    // Cortes de caja - lectura disponible para usuarios autenticados
+    Route::get('/cortes', [CorteCajaController::class, 'index'])->name('cortes.index');
+    Route::get('/cortes-export/excel', [CorteCajaController::class, 'exportExcel'])->name('cortes.export.excel');
+    Route::get('/cortes-export/pdf', [CorteCajaController::class, 'exportPdf'])->name('cortes.export.pdf');
+    Route::get('/cortes/{corte}/export/excel', [CorteCajaController::class, 'exportIndividualExcel'])->name('cortes.export-individual.excel');
+    Route::get('/cortes/{corte}/export/pdf', [CorteCajaController::class, 'exportIndividualPdf'])->name('cortes.export-individual.pdf');
+    Route::get('/cortes/{corte}', [CorteCajaController::class, 'show'])->name('cortes.show');
     
     // Rutas de Usuarios - Disponibles para todos (solo lectura)
     Route::resource('usuarios', UsuarioController::class)->only(['index', 'show']);

@@ -56,6 +56,15 @@
                     <i class="fas fa-cash-register nav-icon mr-2"></i>
                     <span class="nav-label">Ventas</span>
                 </a>
+
+                <a href="{{ route('cortes.index') }}" 
+                   class="px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 whitespace-nowrap
+                          {{ request()->routeIs('cortes.*') 
+                              ? 'bg-gray-800 text-white' 
+                              : 'text-gray-700 hover:bg-gray-100' }}">
+                    <i class="fas fa-calculator nav-icon mr-2"></i>
+                    <span class="nav-label">Cortes</span>
+                </a>
                 
                 <a href="{{ route('apartados.index') }}" 
                    class="px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 whitespace-nowrap
@@ -195,6 +204,15 @@
                           : 'text-gray-700 hover:bg-gray-100' }}">
                 <i class="fas fa-cash-register w-6"></i>
                 <span class="ml-3">Ventas</span>
+            </a>
+
+            <a href="{{ route('cortes.index') }}" 
+               class="flex items-center px-4 py-3 rounded-lg text-sm font-medium transition-colors duration-150
+                      {{ request()->routeIs('cortes.*') 
+                          ? 'bg-gray-800 text-white' 
+                          : 'text-gray-700 hover:bg-gray-100' }}">
+                <i class="fas fa-calculator w-6"></i>
+                <span class="ml-3">Cortes</span>
             </a>
             
             <a href="{{ route('apartados.index') }}" 

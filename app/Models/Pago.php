@@ -38,8 +38,12 @@ class Pago extends Model
     public function getTipoPagoLabel()
     {
         return match($this->metodo_pago) {
+            'efectivo' => 'Efectivo',
+            'transferencia' => 'Transferencia',
+            'tarjeta' => 'Tarjeta',
             'contado' => 'Contado',
             'credito' => 'Crédito',
+            'no_especificado' => 'No especificado',
             default => 'Desconocido',
         };
     }

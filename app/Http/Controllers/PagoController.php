@@ -6,12 +6,16 @@ use App\Models\Pago;
 use App\Models\Venta;
 use App\Models\Libro;
 use App\Services\InventoryStockService;
+use App\Services\IngresoCajaService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class PagoController extends Controller
 {
-    public function __construct(private InventoryStockService $stockService)
+    public function __construct(
+        private InventoryStockService $stockService,
+        private IngresoCajaService $ingresoCajaService
+    )
     {
     }
 
@@ -125,7 +129,7 @@ class PagoController extends Controller
         $validated = $request->validate([
             'fecha_pago' => 'required|date',
             'monto' => 'required|numeric|min:0.01',
-            'metodo_pago' => 'required|in:contado,credito',
+            'metodo_pago' => 'required|in:efectivo,transferencia,tarjeta,no_especificado',
             'comprobante' => 'nullable|string|max:255',
             'notas' => 'nullable|string',
         ], [
@@ -157,7 +161,7 @@ class PagoController extends Controller
             $estadoAnterior = $venta->estado_pago;
             $venta->actualizarEstadoPago();
 
-
+            $this->ingresoCajaService->registrarPago($pago);
 
             DB::commit();
 
@@ -204,6 +208,7 @@ class PagoController extends Controller
             
             // Eliminar el pago
             $pago->delete();
+            $this->ingresoCajaService->cancelarPorPago($pago);
 
             // Actualizar el estado de pago de la venta
             $venta->actualizarEstadoPago();

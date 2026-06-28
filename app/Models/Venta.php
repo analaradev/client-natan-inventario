@@ -16,6 +16,7 @@ class Venta extends Model
         'apartado_id',
         'fecha_venta',
         'tipo_pago',
+        'metodo_pago',
         'subtotal',
         'descuento_global',
         'total',
@@ -33,7 +34,8 @@ class Venta extends Model
     ];
 
     protected $casts = [
-        'fecha_venta' => 'date',
+            'fecha_venta' => 'date',
+            'metodo_pago' => 'string',
         'subtotal' => 'decimal:2',
         'descuento_global' => 'decimal:2',
         'total' => 'decimal:2',

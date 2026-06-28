@@ -71,10 +71,10 @@
                     </div>
 
                     <div>
-                        <p class="text-sm text-gray-600 mb-1">Tipo de Pago</p>
+                        <p class="text-sm text-gray-600 mb-1">Metodo de Pago</p>
                         <p class="text-lg font-semibold text-gray-800">
-                            <i class="fas fa-credit-card text-gray-400 mr-1"></i>
-                            {{ $venta->getTipoPagoLabel() }}
+                            <i class="fas fa-wallet text-gray-400 mr-1"></i>
+                            {{ \App\Models\IngresoCaja::metodosPago()[$venta->metodo_pago] ?? ucfirst(str_replace('_', ' ', $venta->metodo_pago ?? 'no_especificado')) }}
                         </p>
                     </div>
 

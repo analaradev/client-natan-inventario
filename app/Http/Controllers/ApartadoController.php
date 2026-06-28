@@ -12,6 +12,7 @@ use App\Services\CodeGeneratorService;
 use App\Services\ExcelReportService;
 use App\Services\PdfReportService;
 use App\Services\InventoryStockService;
+use App\Services\IngresoCajaService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
@@ -27,17 +28,20 @@ class ApartadoController extends Controller
     protected $excelReportService;
     protected $pdfReportService;
     protected $stockService;
+    protected $ingresoCajaService;
 
     public function __construct(
         CodeGeneratorService $codeGenerator,
         ExcelReportService $excelReportService,
         PdfReportService $pdfReportService,
-        InventoryStockService $stockService
+        InventoryStockService $stockService,
+        IngresoCajaService $ingresoCajaService
     ) {
         $this->codeGenerator = $codeGenerator;
         $this->excelReportService = $excelReportService;
         $this->pdfReportService = $pdfReportService;
         $this->stockService = $stockService;
+        $this->ingresoCajaService = $ingresoCajaService;
     }
 
     /**
@@ -278,7 +282,7 @@ class ApartadoController extends Controller
 
             // Si hubo enganche, crear el primer abono
             if ($validated['enganche'] > 0) {
-                $apartado->abonos()->create([
+                $enganche = $apartado->abonos()->create([
                     'fecha_abono' => $validated['fecha_apartado'],
                     'monto' => $validated['enganche'],
                     'saldo_anterior' => $montoTotal,
@@ -287,6 +291,7 @@ class ApartadoController extends Controller
                     'observaciones' => 'Enganche inicial',
                     'usuario' => Auth::user()->name ?? 'Sistema',
                 ]);
+                $this->ingresoCajaService->registrarAbono($enganche, 'automatico', 'enganche_apartado');
             }
 
             DB::commit();
@@ -920,7 +925,7 @@ class ApartadoController extends Controller
 
             // Si hubo enganche, crear el primer abono
             if ($validated['enganche'] > 0) {
-                $apartado->abonos()->create([
+                $enganche = $apartado->abonos()->create([
                     'fecha_abono' => $validated['fecha_apartado'],
                     'monto' => $validated['enganche'],
                     'saldo_anterior' => $montoTotal,
@@ -929,6 +934,7 @@ class ApartadoController extends Controller
                     'observaciones' => 'Enganche inicial desde app móvil',
                     'usuario' => $validated['usuario'],
                 ]);
+                $this->ingresoCajaService->registrarAbono($enganche, 'automatico', 'enganche_apartado');
             }
 
             DB::commit();

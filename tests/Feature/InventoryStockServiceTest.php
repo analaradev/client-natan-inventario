@@ -564,6 +564,9 @@ class InventoryStockServiceTest extends TestCase
         $venta = Venta::findOrFail($ventaId);
         $this->assertEquals($venta->total, $venta->total_pagado);
         $this->assertGreaterThan(0, $venta->total_pagado);
+        $this->assertSame('contado', $venta->tipo_pago);
+        $this->assertFalse((bool) $venta->es_a_plazos);
+        $this->assertSame('completado', $venta->estado_pago);
 
         // Verificar descuento de stock correcto (5 - 2 = 3)
         $this->assertSame(3, $libro->fresh()->stock_subinventario);
@@ -634,6 +637,9 @@ class InventoryStockServiceTest extends TestCase
         $venta = Venta::findOrFail($ventaId);
         $this->assertEquals($venta->total, $venta->total_pagado);
         $this->assertGreaterThan(0, $venta->total_pagado);
+        $this->assertSame('contado', $venta->tipo_pago);
+        $this->assertFalse((bool) $venta->es_a_plazos);
+        $this->assertSame('completado', $venta->estado_pago);
 
         // Verificar descuento de stock correcto (10 - 1 = 9)
         $this->assertSame(9, $libro->fresh()->stock);

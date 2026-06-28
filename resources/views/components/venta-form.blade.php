@@ -247,30 +247,31 @@
             @enderror
         </div>
 
-        <!-- Tipo de Pago -->
+        <input type="hidden" name="tipo_pago" value="contado">
+
+        <!-- Metodo de Pago -->
         <div>
-            <label for="tipo_pago" class="block text-sm font-medium text-gray-700 mb-2">
-                Tipo de Pago <span class="text-red-500">*</span>
+            <label for="metodo_pago" class="block text-sm font-medium text-gray-700 mb-2">
+                Metodo de Pago
             </label>
             <div class="relative">
                 <span class="absolute left-3 top-2.5 text-gray-400">
-                    <i class="fas fa-credit-card"></i>
+                    <i class="fas fa-wallet"></i>
                 </span>
                 <select 
-                    name="tipo_pago" 
-                    id="tipo_pago" 
-                    required
-                    class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 @error('tipo_pago') border-red-500 @enderror">
-                    <option value="">Selecciona el tipo de pago</option>
-                    <option value="contado" {{ old('tipo_pago', $venta?->tipo_pago ?? 'contado') == 'contado' ? 'selected' : '' }}>Contado</option>
-                    <option value="credito" {{ old('tipo_pago', $venta?->tipo_pago) == 'credito' ? 'selected' : '' }}>Crédito</option>
-                    <option value="mixto" {{ old('tipo_pago', $venta?->tipo_pago) == 'mixto' ? 'selected' : '' }}>Mixto</option>
+                    name="metodo_pago" 
+                    id="metodo_pago" 
+                    class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 @error('metodo_pago') border-red-500 @enderror">
+                    <option value="no_especificado" {{ old('metodo_pago', $venta?->metodo_pago ?? 'no_especificado') == 'no_especificado' ? 'selected' : '' }}>No especificado</option>
+                    <option value="efectivo" {{ old('metodo_pago', $venta?->metodo_pago) == 'efectivo' ? 'selected' : '' }}>Efectivo</option>
+                    <option value="transferencia" {{ old('metodo_pago', $venta?->metodo_pago) == 'transferencia' ? 'selected' : '' }}>Transferencia</option>
+                    <option value="tarjeta" {{ old('metodo_pago', $venta?->metodo_pago) == 'tarjeta' ? 'selected' : '' }}>Tarjeta</option>
                 </select>
             </div>
             <p class="mt-1 text-sm text-gray-500">
-                <i class="fas fa-info-circle"></i> Forma en que se realizará el pago
+                <i class="fas fa-info-circle"></i> Se usa para el corte de caja
             </p>
-            @error('tipo_pago')
+            @error('metodo_pago')
                 <p class="mt-1 text-sm text-red-500">{{ $message }}</p>
             @enderror
         </div>

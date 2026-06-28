@@ -75,10 +75,10 @@
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <!-- Tipo de Pago -->
+                        <!-- Metodo de Pago -->
                         <div>
                             <label for="metodo_pago" class="block text-sm font-medium text-gray-700 mb-2">
-                                Tipo de Pago <span class="text-red-500">*</span>
+                                Metodo de Pago <span class="text-red-500">*</span>
                             </label>
                             <div class="relative">
                                 <span class="absolute left-3 top-2.5 text-gray-400">
@@ -89,9 +89,11 @@
                                     id="metodo_pago"
                                     class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 @error('metodo_pago') border-red-500 @enderror"
                                     required>
-                                    <option value="">Seleccionar tipo de pago</option>
-                                    <option value="contado" {{ old('metodo_pago') == 'contado' ? 'selected' : '' }}>Contado</option>
-                                    <option value="credito" {{ old('metodo_pago') == 'credito' ? 'selected' : '' }}>Crédito</option>
+                                    <option value="">Seleccionar metodo de pago</option>
+                                    <option value="efectivo" {{ old('metodo_pago') == 'efectivo' ? 'selected' : '' }}>Efectivo</option>
+                                    <option value="transferencia" {{ old('metodo_pago') == 'transferencia' ? 'selected' : '' }}>Transferencia</option>
+                                    <option value="tarjeta" {{ old('metodo_pago') == 'tarjeta' ? 'selected' : '' }}>Tarjeta</option>
+                                    <option value="no_especificado" {{ old('metodo_pago') == 'no_especificado' ? 'selected' : '' }}>No especificado</option>
                                 </select>
                             </div>
                             @error('metodo_pago')

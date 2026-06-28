@@ -8,6 +8,7 @@ use App\Models\Cliente;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use App\Services\IngresoCajaService;
 
 use App\Traits\HasRoleChecks;
 
@@ -318,6 +319,7 @@ class AbonoMovilController extends Controller
 
             // Actualizar saldo del apartado
             $apartado->saldo_pendiente = $saldoAnterior - $request->monto;
+            app(IngresoCajaService::class)->registrarAbono($abono);
 
             // Si el saldo llega a 0 (con precisión de 2 decimales), liquidar automáticamente
             if (bccomp((string) round($apartado->saldo_pendiente, 2), '0', 2) <= 0) {
