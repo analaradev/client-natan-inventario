@@ -188,17 +188,26 @@
             @foreach($libros as $libro)
                 <x-data-table-row>
                     <x-data-table-cell bold>{{ $libro->id }}</x-data-table-cell>
-                    <x-data-table-cell bold>{{ $libro->nombre }}</x-data-table-cell>
+                    <x-data-table-cell bold wrap class="max-w-md">{{ $libro->nombre }}</x-data-table-cell>
                     <x-data-table-cell>{{ $libro->codigo_barras }}</x-data-table-cell>
                     <x-data-table-cell>${{ number_format($libro->precio, 2) }}</x-data-table-cell>
-                    <x-data-table-cell>
-                        <div class="flex flex-col gap-1">
-                            <x-badge :type="$libro->stock_total > 10 ? 'success' : ($libro->stock_total > 0 ? 'warning' : 'danger')">
-                                Total: {{ $libro->stock_total }}
-                            </x-badge>
-                            <span class="text-xs text-gray-500">
-                                General: {{ $libro->stock }} | Sub: {{ $libro->stock_subinventario }}
-                            </span>
+                    <x-data-table-cell wrap>
+                        <div class="max-w-[11rem] space-y-1">
+                            <div class="inline-flex items-center gap-2 rounded-full px-2.5 py-0.5 text-[11px] font-semibold {{ $libro->stock_total > 10 ? 'bg-green-100 text-green-800' : ($libro->stock_total > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800') }}">
+                                <span>Total:</span>
+                                <span>{{ number_format($libro->stock_total) }}</span>
+                            </div>
+                            <div class="flex flex-wrap gap-1">
+                                <span class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-700">
+                                    Gral <strong class="text-gray-900">{{ number_format($libro->stock_general_disponible) }}</strong>
+                                </span>
+                                <span class="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+                                    Subs <strong class="text-blue-900">{{ number_format($libro->stock_subinventario) }}</strong>
+                                </span>
+                                <span class="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2 py-0.5 text-[11px] font-medium text-purple-700">
+                                    Aptos <strong class="text-purple-900">{{ number_format($libro->stock_apartado) }}</strong>
+                                </span>
+                            </div>
                         </div>
                     </x-data-table-cell>
                     <x-data-table-actions

@@ -13,8 +13,12 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Barryvdh\DomPDF\Facade\Pdf;
 
+use App\Traits\HasRoleChecks;
+
 class InventarioController extends Controller
 {
+    use HasRoleChecks;
+
     protected $libroService;
     protected $excelService;
     protected $excelReportService;
@@ -67,10 +71,37 @@ class InventarioController extends Controller
             $this->libroService->getValidationMessages()
         );
 
-        Libro::create($validated);
+        \Illuminate\Support\Facades\DB::beginTransaction();
+        try {
+            $stockInicial = isset($validated['stock']) ? (int)$validated['stock'] : 0;
 
-        return redirect()->route('inventario.index')
-            ->with('success', 'Libro agregado exitosamente');
+            // Excluir stock de la creación directa para delegar al MovimientoObserver
+            $data = $validated;
+            unset($data['stock']);
+
+            $libro = Libro::create($data);
+
+            if ($stockInicial > 0) {
+                \App\Models\Movimiento::create([
+                    'libro_id' => $libro->id,
+                    'tipo_movimiento' => 'entrada',
+                    'tipo_entrada' => 'compra',
+                    'cantidad' => $stockInicial,
+                    'precio_unitario' => $libro->precio,
+                    'fecha' => now()->toDateString(),
+                    'observaciones' => 'Inventario inicial (Creación del libro)',
+                    'usuario' => auth()->user()->name ?? 'Admin',
+                ]);
+            }
+
+            \Illuminate\Support\Facades\DB::commit();
+
+            return redirect()->route('inventario.index')
+                ->with('success', 'Libro agregado exitosamente' . ($stockInicial > 0 ? " con stock inicial de {$stockInicial}" : ''));
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\DB::rollBack();
+            return back()->withErrors(['error' => 'Error al registrar el libro: ' . $e->getMessage()])->withInput();
+        }
     }
 
     /**
@@ -105,7 +136,7 @@ class InventarioController extends Controller
         try {
             $libro = Libro::whereKey($id)->lockForUpdate()->firstOrFail();
             $oldStock = (int)$libro->stock;
-
+            $newStockVal = $oldStock;
             // Validar que el stock no sea menor que la cantidad reservada en apartados activos
             if (isset($validated['stock'])) {
                 $newStockVal = (int)$validated['stock'];
@@ -119,16 +150,16 @@ class InventarioController extends Controller
                         ->sum('ad.cantidad');
                     
                     if ($newStockVal < $reservadoGeneral) {
-                        throw new \DomainException("El stock no puede ser menor que la cantidad reservada en apartados activos ({$reservadoGeneral} unidades)");
+                        throw new \DomainException("El stock no puede ser menor que la cantidad en apartados activos ({$reservadoGeneral} unidades)");
                     }
                 }
+                unset($validated['stock']); // Excluir stock de la actualización directa
             }
 
             $libro->update($validated);
-            $newStock = (int)$libro->stock;
 
-            if ($oldStock !== $newStock) {
-                $diferencia = $newStock - $oldStock;
+            if ($oldStock !== $newStockVal) {
+                $diferencia = $newStockVal - $oldStock;
                 $tipoMovimiento = $diferencia > 0 ? 'entrada' : 'salida';
                 $tipoAjuste = $diferencia > 0 ? 'ajuste_positivo' : 'ajuste_negativo';
 
@@ -139,7 +170,7 @@ class InventarioController extends Controller
                     'cantidad' => abs($diferencia),
                     'precio_unitario' => $libro->precio,
                     'fecha' => now()->toDateString(),
-                    'observaciones' => "Ajuste manual de stock por actualización del libro (Stock anterior: {$oldStock}, Nuevo stock: {$newStock})",
+                    'observaciones' => "Ajuste manual de stock por actualización del libro (Stock anterior: {$oldStock}, Nuevo stock: {$newStockVal})",
                     'usuario' => auth()->user()->name ?? 'Admin',
                 ]);
             }
@@ -367,8 +398,15 @@ class InventarioController extends Controller
     /**
      * API - Buscar libro por código de barras o QR
      */
-    public function apiBuscarPorCodigo($codigo)
+    public function apiBuscarPorCodigo(Request $request, $codigo)
     {
+        if (!$this->hasValidMobileRole($request)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No tienes autorización para acceder a este recurso.'
+            ], 403);
+        }
+
         $libro = Libro::where('codigo_barras', $codigo)->first();
 
         if (!$libro) {
@@ -399,6 +437,13 @@ class InventarioController extends Controller
      */
     public function apiListarLibros(Request $request)
     {
+        if (!$this->hasValidMobileRole($request)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No tienes autorización para acceder a este recurso.'
+            ], 403);
+        }
+
         $query = Libro::query();
 
         // Filtro: Solo libros con stock
@@ -423,7 +468,7 @@ class InventarioController extends Controller
 
         // Ordenamiento
         $orderBy = $request->get('ordenar', 'nombre');
-        $orderDirection = $request->get('direccion', 'asc');
+        $orderDirection = strtolower($request->get('direccion', 'asc')) === 'desc' ? 'desc' : 'asc';
         
         $allowedOrderBy = ['nombre', 'precio', 'stock', 'created_at'];
         if (in_array($orderBy, $allowedOrderBy)) {
@@ -438,14 +483,12 @@ class InventarioController extends Controller
 
         // Si se proporciona cod_congregante, obtener los subinventarios activos asignados a este congregante
         $misSubinventariosIds = [];
-        $codCongregante = $request->get('cod_congregante');
+        $codCongregante = $request->attributes->get('validated_cod_congregante', $request->get('cod_congregante'));
         
         if ($codCongregante) {
-            $misSubinventariosIds = \DB::table('subinventario_user')
-                ->join('subinventarios', 'subinventario_user.subinventario_id', '=', 'subinventarios.id')
-                ->where('subinventario_user.cod_congregante', $codCongregante)
-                ->where('subinventarios.estado', 'activo')
-                ->pluck('subinventario_user.subinventario_id')
+            $misSubinventariosIds = \DB::table('subinventarios')
+                ->where('estado', 'activo')
+                ->pluck('id')
                 ->toArray();
         }
 
@@ -527,8 +570,15 @@ class InventarioController extends Controller
      * API - Verificar disponibilidad de un libro en inventarios
      * Retorna si el libro está en inventario general y/o en qué subinventarios
      */
-    public function apiDisponibilidadLibro($id)
+    public function apiDisponibilidadLibro(Request $request, $id)
     {
+        if (!$this->hasValidMobileRole($request)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No tienes autorización para acceder a este recurso.'
+            ], 403);
+        }
+
         $libro = Libro::with(['subinventarios' => function($query) {
             $query->where('estado', 'activo')
                   ->wherePivot('cantidad', '>', 0);
@@ -574,5 +624,3 @@ class InventarioController extends Controller
         ]);
     }
 }
-
-

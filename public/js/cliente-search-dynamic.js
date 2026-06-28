@@ -132,9 +132,12 @@ class ClienteSearchDynamic {
     
     handleNewCliente() {
         // Guardar estado del formulario
-        if (window.ventaFormManager) {
+        if (window.ventaFormManagerInstance) {
+            window.ventaFormManagerInstance.saveFormState();
+        } else if (window.ventaFormManager) {
             window.ventaFormManager.saveFormState();
         }
+
         
         // Redirigir a crear cliente
         const returnUrl = encodeURIComponent(window.location.href);
@@ -288,7 +291,7 @@ class ClienteSearchDynamic {
         this.selectedDiv.classList.add('hidden');
         this.searchInput.value = '';
         this.clearBtn.classList.add('hidden');
-        this.searchInput.placeholder = 'Buscar cliente o dejar vacío...';
+        this.searchInput.placeholder = 'Buscar cliente...';
         
         // Dispatch change event
         this.hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));

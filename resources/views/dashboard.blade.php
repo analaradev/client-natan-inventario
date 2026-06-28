@@ -8,6 +8,7 @@
 @section('content')
 @php
     $isAdminLibreria = \App\Helpers\AuthHelper::isAdminLibreria();
+    $canManageSalesOperations = \App\Helpers\AuthHelper::canManageSalesOperations();
 @endphp
 
 <x-page-layout 
@@ -67,7 +68,7 @@
                     <i class="fas fa-cash-register text-green-600 mr-2"></i>
                     Ver Ventas
                 </a>
-                @if(\App\Helpers\AuthHelper::isAdminLibreria())
+                @if($canManageSalesOperations)
                     <a href="{{ route('ventas.create') }}" class="block p-4 bg-green-50 hover:bg-green-100 rounded-lg transition-colors">
                         <i class="fas fa-plus-circle text-green-600 mr-2"></i>
                         Registrar Nueva Venta

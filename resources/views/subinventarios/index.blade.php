@@ -167,48 +167,56 @@
                                         {{ $subinventario->getEstadoLabel() }}
                                     </span>
                                 </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                                    <a href="{{ route('subinventarios.show', $subinventario) }}" 
-                                       class="text-blue-600 hover:text-blue-900"
-                                       title="Ver detalles">
-                                        <i class="fas fa-eye"></i>
-                                    </a>
+                                <td class="px-6 py-4 text-sm font-medium">
+                                    <div class="flex flex-wrap gap-1">
+                                        <x-button
+                                            href="{{ route('subinventarios.show', $subinventario) }}"
+                                            variant="primary"
+                                            size="sm"
+                                            icon="fas fa-eye"
+                                            title="Ver detalles">
+                                        </x-button>
                                     
-                                    @if($subinventario->estado === 'activo')
-                                        @if($isAdminLibreria)
-                                            <a href="{{ route('subinventarios.edit', $subinventario) }}" 
-                                               class="text-yellow-600 hover:text-yellow-900"
-                                               title="Editar">
-                                                <i class="fas fa-edit"></i>
-                                            </a>
+                                        @if($subinventario->estado === 'activo')
+                                            @if($isAdminLibreria)
+                                                <x-button
+                                                    href="{{ route('subinventarios.edit', $subinventario) }}"
+                                                    variant="warning"
+                                                    size="sm"
+                                                    icon="fas fa-edit"
+                                                    title="Editar">
+                                                </x-button>
 
-                                        @else
-                                            <button disabled class="text-gray-400 cursor-not-allowed opacity-60" title="Solo Admin Librería">
-                                                <i class="fas fa-edit"></i>
-                                            </button>
+                                            @else
+                                                <button disabled class="inline-flex items-center justify-center px-3 py-1.5 text-sm rounded-lg bg-gray-200 text-gray-400 cursor-not-allowed opacity-60" title="Solo Admin Librería">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                            @endif
                                         @endif
-                                    @endif
 
-                                    @if($subinventario->estado !== 'completado')
-                                        @if($isAdminLibreria)
-                                            <form action="{{ route('subinventarios.destroy', $subinventario) }}" 
-                                                  method="POST" 
-                                                  class="inline"
-                                                  onsubmit="return confirm('¿Eliminar este sub-inventario?');">
-                                                @csrf
-                                                @method('DELETE')
-                                                <button type="submit" 
-                                                        class="text-red-600 hover:text-red-900"
+                                        @if($subinventario->estado !== 'completado')
+                                            @if($isAdminLibreria)
+                                                <form action="{{ route('subinventarios.destroy', $subinventario) }}" 
+                                                      method="POST" 
+                                                      class="inline"
+                                                      onsubmit="return confirm('¿Eliminar este sub-inventario?');">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <x-button
+                                                        type="submit"
+                                                        variant="danger"
+                                                        size="sm"
+                                                        icon="fas fa-trash"
                                                         title="Eliminar">
+                                                    </x-button>
+                                                </form>
+                                            @else
+                                                <button disabled class="inline-flex items-center justify-center px-3 py-1.5 text-sm rounded-lg bg-gray-200 text-gray-400 cursor-not-allowed opacity-60" title="Solo Admin Librería">
                                                     <i class="fas fa-trash"></i>
                                                 </button>
-                                            </form>
-                                        @else
-                                            <button disabled class="text-gray-400 cursor-not-allowed opacity-60" title="Solo Admin Librería">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
+                                            @endif
                                         @endif
-                                    @endif
+                                    </div>
                                 </td>
                             </tr>
                         @endforeach

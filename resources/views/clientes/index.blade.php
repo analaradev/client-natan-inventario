@@ -8,6 +8,7 @@
 @section('content')
 @php
     $isAdminLibreria = \App\Helpers\AuthHelper::isAdminLibreria();
+    $canManageSalesOperations = \App\Helpers\AuthHelper::canManageSalesOperations();
 @endphp
 
 <x-page-layout 
@@ -15,7 +16,7 @@
     description="Total: {{ $totalClientes }} clientes"
 >
     <x-slot name="header">
-        @if($isAdminLibreria)
+        @if($canManageSalesOperations)
             <x-button 
                 variant="primary" 
                 icon="fas fa-plus"

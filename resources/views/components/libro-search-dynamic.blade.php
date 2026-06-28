@@ -38,7 +38,7 @@
     @endif
     
     <!-- Input de búsqueda visible -->
-    <div class="relative">
+    <div class="libro-search-box relative">
         <div class="relative">
             <span class="absolute left-3 top-2.5 text-gray-400">
                 <i class="fas fa-search"></i>
@@ -149,5 +149,4 @@
     }
 })();
 </script>
-
 

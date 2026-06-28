@@ -317,8 +317,6 @@
                         </div>
                     </div>
 
-                    <!-- Campo hidden para enviar el monto -->
-                    <input type="hidden" name="monto_a_pagar" id="monto_a_pagar" value="{{ old('monto_a_pagar', $envio->monto_a_pagar) }}">
                 @else
                     <div class="bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-12 text-center">
                         <div class="flex flex-col items-center">
@@ -386,11 +384,6 @@
         if (document.getElementById('totalCostoEnvioDisplay')) {
             document.getElementById('totalCostoEnvioDisplay').textContent = 
                 '$' + totalCostoEnvio.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-        }
-        
-        // Actualizar campo hidden monto_a_pagar
-        if (document.getElementById('monto_a_pagar')) {
-            document.getElementById('monto_a_pagar').value = totalCostoEnvio.toFixed(2);
         }
     }
 

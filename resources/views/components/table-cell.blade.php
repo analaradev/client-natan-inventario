@@ -1,4 +1,7 @@
-@props(['align' => 'left'])
+@props([
+    'align' => 'left',
+    'wrap' => false,
+])
 
 @php
     $alignClasses = [
@@ -8,6 +11,6 @@
     ];
 @endphp
 
-<td {{ $attributes->merge(['class' => 'px-6 py-4 whitespace-nowrap text-sm text-gray-900 ' . $alignClasses[$align]]) }}>
+<td {{ $attributes->merge(['class' => 'px-6 py-4 text-sm text-gray-900 ' . ($wrap ? 'whitespace-normal break-words ' : 'whitespace-nowrap ') . $alignClasses[$align]]) }}>
     {{ $slot }}
 </td>

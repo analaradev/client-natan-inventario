@@ -145,12 +145,7 @@ class MovimientoController extends Controller
                 'usuario' => session('username')
             ]);
 
-            // Actualizar el stock del libro
-            if ($request->tipo_movimiento === 'entrada') {
-                $libro->increment('stock', $request->cantidad);
-            } else {
-                $libro->decrement('stock', $request->cantidad);
-            }
+
 
             DB::commit();
 
@@ -217,7 +212,7 @@ class MovimientoController extends Controller
     {
         // Construir query con filtros
         $query = $this->buildFilteredQuery($request);
-        $movimientos = $query->get();
+        $totalCount = (clone $query)->count();
         
         // Crear spreadsheet
         $spreadsheet = $this->excelReportService->createSpreadsheet();
@@ -232,15 +227,15 @@ class MovimientoController extends Controller
         $row = $this->excelReportService->setFilters($sheet, $filtros, $row);
         
         // Estadísticas
-        if ($movimientos->count() > 0) {
-            $totalEntradas = $movimientos->where('tipo_movimiento', 'entrada')->sum('cantidad');
-            $totalSalidas = $movimientos->where('tipo_movimiento', 'salida')->sum('cantidad');
+        if ($totalCount > 0) {
+            $totalEntradas = (clone $query)->where('tipo_movimiento', 'entrada')->sum('cantidad');
+            $totalSalidas = (clone $query)->where('tipo_movimiento', 'salida')->sum('cantidad');
             
             $sheet->setCellValue('A' . $row, 'RESUMEN:');
             $sheet->getStyle('A' . $row)->getFont()->setBold(true);
             $row++;
             
-            $sheet->setCellValue('A' . $row, 'Total de movimientos: ' . $movimientos->count());
+            $sheet->setCellValue('A' . $row, 'Total de movimientos: ' . $totalCount);
             $row++;
             $sheet->setCellValue('A' . $row, 'Total entradas: ' . $totalEntradas . ' unidades');
             $row++;
@@ -252,9 +247,12 @@ class MovimientoController extends Controller
         $headers = ['ID', 'Fecha', 'Libro', 'Tipo', 'Cantidad', 'Precio Unit.', 'Descuento', 'Subtotal'];
         $row = $this->excelReportService->setTableHeaders($sheet, $headers, $row);
         
+        // Eager load for lazy loading
+        $lazyQuery = (clone $query)->with('libro');
+
         // Datos
         $data = [];
-        foreach ($movimientos as $movimiento) {
+        foreach ($lazyQuery->lazy(250) as $movimiento) {
             $subtotal = $movimiento->precio_unitario * $movimiento->cantidad * (1 - ($movimiento->descuento / 100));
             $data[] = [
                 $movimiento->id,
@@ -285,18 +283,20 @@ class MovimientoController extends Controller
     {
         // Construir query con filtros
         $query = $this->buildFilteredQuery($request);
-        $movimientos = $query->get();
         
         // Preparar filtros
         $filtros = $this->buildFiltersList($request);
         
         // Calcular estadísticas
         $estadisticas = [
-            'total' => $movimientos->count(),
-            'entradas' => $movimientos->where('tipo_movimiento', 'entrada')->sum('cantidad'),
-            'salidas' => $movimientos->where('tipo_movimiento', 'salida')->sum('cantidad'),
+            'total' => (clone $query)->count(),
+            'entradas' => (clone $query)->where('tipo_movimiento', 'entrada')->sum('cantidad'),
+            'salidas' => (clone $query)->where('tipo_movimiento', 'salida')->sum('cantidad'),
         ];
         
+        // Limitar los resultados del PDF para evitar OOM con DOMPDF
+        $movimientos = $query->with('libro')->limit(200)->get();
+
         // Obtener estilos base
         $styles = $this->pdfReportService->getBaseStyles();
         

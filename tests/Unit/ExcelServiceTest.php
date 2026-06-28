@@ -87,11 +87,25 @@ class ExcelServiceTest extends TestCase
             'stock' => 10
         ]);
 
+        $this->assertDatabaseHas('movimientos', [
+            'tipo_movimiento' => 'entrada',
+            'tipo_entrada' => 'compra',
+            'cantidad' => 10,
+            'observaciones' => 'Inventario inicial (Importación Excel)',
+        ]);
+
         $this->assertDatabaseHas('libros', [
             'codigo_barras' => '9781234567891',
             'nombre' => 'Libro de Prueba 2',
             'precio' => 200.00,
             'stock' => 5
+        ]);
+
+        $this->assertDatabaseHas('movimientos', [
+            'tipo_movimiento' => 'entrada',
+            'tipo_entrada' => 'compra',
+            'cantidad' => 5,
+            'observaciones' => 'Inventario inicial (Importación Excel)',
         ]);
     }
 

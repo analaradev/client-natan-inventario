@@ -24,6 +24,18 @@ Route::middleware('checkauth')->group(function () {
     
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
 
+    Route::middleware('sales.operations')->group(function () {
+        // Operación diaria permitida para Admin Librería y Supervisor
+        Route::get('/ventas/create', [VentaController::class, 'create'])->name('ventas.create');
+        Route::post('/ventas', [VentaController::class, 'store'])->name('ventas.store');
+
+        Route::get('/apartados/create', [ApartadoController::class, 'create'])->name('apartados.create');
+        Route::post('/apartados', [ApartadoController::class, 'store'])->name('apartados.store');
+
+        Route::get('/clientes/create', [ClienteController::class, 'create'])->name('clientes.create');
+        Route::post('/clientes', [ClienteController::class, 'store'])->name('clientes.store');
+    });
+
     // Rutas que requieren Admin Librería
     Route::middleware('admin.libreria')->group(function () {
         // Inventario - Solo crear, editar, eliminar e importar requieren Admin Librería
@@ -45,17 +57,13 @@ Route::middleware('checkauth')->group(function () {
         Route::put('/movimientos/{movimiento}', [MovimientoController::class, 'update'])->name('movimientos.update');
         Route::delete('/movimientos/{movimiento}', [MovimientoController::class, 'destroy'])->name('movimientos.destroy');
         
-        // Ventas - Solo crear, editar, eliminar, cancelar requieren Admin Librería
-        Route::get('/ventas/create', [VentaController::class, 'create'])->name('ventas.create');
-        Route::post('/ventas', [VentaController::class, 'store'])->name('ventas.store');
+        // Ventas - Editar, eliminar y cancelar requieren Admin Librería
         Route::get('/ventas/{venta}/edit', [VentaController::class, 'edit'])->name('ventas.edit');
         Route::put('/ventas/{venta}', [VentaController::class, 'update'])->name('ventas.update');
         Route::delete('/ventas/{venta}', [VentaController::class, 'destroy'])->name('ventas.destroy');
         Route::post('/ventas/{venta}/cancelar', [VentaController::class, 'cancelar'])->name('ventas.cancelar');
         
-        // Apartados - Solo crear, editar, eliminar, liquidar, cancelar requieren Admin Librería
-        Route::get('/apartados/create', [ApartadoController::class, 'create'])->name('apartados.create');
-        Route::post('/apartados', [ApartadoController::class, 'store'])->name('apartados.store');
+        // Apartados - Editar, eliminar, liquidar y cancelar requieren Admin Librería
         Route::get('/apartados/{apartado}/edit', [ApartadoController::class, 'edit'])->name('apartados.edit');
         Route::put('/apartados/{apartado}', [ApartadoController::class, 'update'])->name('apartados.update');
         Route::delete('/apartados/{apartado}', [ApartadoController::class, 'destroy'])->name('apartados.destroy');
@@ -85,9 +93,7 @@ Route::middleware('checkauth')->group(function () {
         Route::post('/subinventarios/{subinventario}/importar-libros', [SubInventarioController::class, 'importLibros'])->name('subinventarios.import');
         Route::get('/subinventarios/{subinventario}/descargar-plantilla', [SubInventarioController::class, 'descargarPlantilla'])->name('subinventarios.download-template');
         
-        // Clientes - Solo crear, editar, eliminar requieren Admin Librería
-        Route::get('/clientes/create', [ClienteController::class, 'create'])->name('clientes.create');
-        Route::post('/clientes', [ClienteController::class, 'store'])->name('clientes.store');
+        // Clientes - Editar y eliminar requieren Admin Librería
         Route::get('/clientes/{cliente}/edit', [ClienteController::class, 'edit'])->name('clientes.edit');
         Route::put('/clientes/{cliente}', [ClienteController::class, 'update'])->name('clientes.update');
         Route::delete('/clientes/{cliente}', [ClienteController::class, 'destroy'])->name('clientes.destroy');
@@ -114,7 +120,6 @@ Route::middleware('checkauth')->group(function () {
         Route::post('/usuarios', [UsuarioController::class, 'store'])->name('usuarios.store');
         Route::get('/usuarios/{usuario}/edit', [UsuarioController::class, 'edit'])->name('usuarios.edit');
         Route::put('/usuarios/{usuario}', [UsuarioController::class, 'update'])->name('usuarios.update');
-        Route::delete('/usuarios/{usuario}', [UsuarioController::class, 'destroy'])->name('usuarios.destroy');
     });
 
     // Inventario - Rutas de lectura disponibles para todos
@@ -190,4 +195,8 @@ Route::middleware('checkauth')->group(function () {
     Route::get('/apartados-export/excel', [ApartadoController::class, 'exportExcel'])->name('apartados.export.excel');
     Route::get('/apartados-export/pdf', [ApartadoController::class, 'exportPdf'])->name('apartados.export.pdf');
     
+    // API AJAX Routes internas para uso en la interfaz web (dashboard)
+    Route::get('/api/apartados/buscar', [ApartadoController::class, 'apiBuscar']);
+    Route::get('/api/clientes/buscar', [ClienteController::class, 'apiBuscar']);
+    Route::get('/api/subinventarios/{id}/libros', [SubInventarioController::class, 'apiLibrosSubinventarioWeb']);
 });

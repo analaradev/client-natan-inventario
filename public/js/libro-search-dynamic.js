@@ -16,6 +16,7 @@ class LibroSearchDynamic {
             return;
         }
         
+        this.searchBox = this.container.querySelector('.libro-search-box');
         this.searchInput = this.container.querySelector('.libro-search-input');
         this.dropdown = this.container.querySelector('.libro-dropdown');
         this.resultsContainer = this.container.querySelector('.libro-results');
@@ -147,15 +148,23 @@ class LibroSearchDynamic {
         results.forEach(libro => {
             const item = document.createElement('div');
             item.className = 'p-3 hover:bg-gray-50 cursor-pointer transition-colors';
-            // En nueva lógica: stock = inventario general disponible
-            const stockDisplay = libro.stock;
+            
+            const isSub = libro.cantidad_disponible !== undefined;
+            const stockDisp = isSub ? libro.cantidad_disponible : Math.max(0, (libro.stock || 0) - (libro.stock_apartado || 0));
+            const stockFisico = isSub ? libro.cantidad_disponible : (libro.stock || 0);
+            const stockApartado = isSub ? 0 : (libro.stock_apartado || 0);
+
+            let stockDetailsText = `Stock: ${stockDisp}`;
+            if (!isSub && libro.stock_apartado !== undefined) {
+                stockDetailsText = `Disponible: ${stockDisp} (Apartados: ${stockApartado} | Físico: ${stockFisico})`;
+            }
             item.innerHTML = `
                 <div>
                     <p class="font-medium text-gray-900 text-sm">${libro.nombre}</p>
                     <p class="text-xs text-gray-600">
                         <span>Código: ${libro.codigo_barras || 'Sin código'}</span>
                         <span class="mx-2">•</span>
-                        <span class="text-green-700">Stock: ${stockDisplay}</span>
+                        <span class="text-green-700 font-medium">${stockDetailsText}</span>
                         <span class="mx-2">•</span>
                         <span class="text-blue-700">$${parseFloat(libro.precio).toFixed(2)}</span>
                     </p>
@@ -176,16 +185,26 @@ class LibroSearchDynamic {
         this.selectedLibro = libro;
         this.hiddenInput.value = libro.id;
         this.hiddenInput.setAttribute('data-precio', libro.precio);
-        // En nueva lógica: stock = inventario general disponible
-        const stockDisponible = libro.stock;
-        this.hiddenInput.setAttribute('data-stock', stockDisponible);
+        
+        const isSub = libro.cantidad_disponible !== undefined;
+        const stockDisp = isSub ? libro.cantidad_disponible : Math.max(0, (libro.stock || 0) - (libro.stock_apartado || 0));
+        const stockFisico = isSub ? libro.cantidad_disponible : (libro.stock || 0);
+        const stockApartado = isSub ? 0 : (libro.stock_apartado || 0);
+
+        this.hiddenInput.setAttribute('data-stock', stockDisp);
         
         this.selectedNombre.textContent = libro.nombre;
         this.selectedCodigo.textContent = 'Código: ' + (libro.codigo_barras || 'Sin código');
         this.selectedPrecio.textContent = '$' + parseFloat(libro.precio).toFixed(2);
-        this.selectedStock.textContent = stockDisponible + ' unidades';
+        
+        let stockSelectText = stockDisp + ' unidades';
+        if (!isSub && libro.stock_apartado !== undefined) {
+            stockSelectText = `Disponible: ${stockDisp} | Apartados: ${stockApartado} | Físico: ${stockFisico}`;
+        }
+        this.selectedStock.textContent = stockSelectText;
         
         this.selectedDiv.classList.remove('hidden');
+        this.searchBox.classList.add('hidden');
         this.searchInput.value = '';
         this.dropdown.classList.add('hidden');
         this.clearBtn.classList.add('hidden');
@@ -209,6 +228,7 @@ class LibroSearchDynamic {
         this.hiddenInput.removeAttribute('data-precio');
         this.hiddenInput.removeAttribute('data-stock');
         this.selectedDiv.classList.add('hidden');
+        this.searchBox.classList.remove('hidden');
         this.searchInput.value = '';
         this.clearBtn.classList.add('hidden');
         this.searchInput.placeholder = 'Buscar libro...';

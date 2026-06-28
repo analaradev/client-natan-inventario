@@ -273,8 +273,32 @@
                         </div>
                     </div>
 
-                    <!-- Campo hidden para enviar el monto -->
-                    <input type="hidden" name="monto_a_pagar" id="monto_a_pagar" value="0.00">
+                    <!-- Monto editable para registrar el cargo real de FedEx -->
+                    <div class="mt-6 max-w-sm">
+                        <label for="monto_a_pagar" class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-dollar-sign text-blue-600 mr-1"></i>
+                            Monto a Pagar FedEx <span class="text-red-500">*</span>
+                        </label>
+                        <div class="relative">
+                            <span class="absolute left-3 top-2.5 text-gray-400">$</span>
+                            <input
+                                type="number"
+                                name="monto_a_pagar"
+                                id="monto_a_pagar"
+                                value="{{ old('monto_a_pagar', '0.00') }}"
+                                step="0.01"
+                                min="0"
+                                required
+                                class="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 @error('monto_a_pagar') border-red-500 @enderror"
+                            >
+                        </div>
+                        <p class="mt-1 text-sm text-gray-500">
+                            Puedes ajustar este monto si el cargo real difiere del cálculo de las ventas seleccionadas.
+                        </p>
+                        @error('monto_a_pagar')
+                            <p class="mt-1 text-sm text-red-500">{{ $message }}</p>
+                        @enderror
+                    </div>
                 @else
                     <div class="bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-12 text-center ">
                         <div class="flex flex-col items-center">

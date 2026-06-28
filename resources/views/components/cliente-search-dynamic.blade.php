@@ -13,7 +13,9 @@
     'selected' => null,
     'clienteData' => null,
     'label' => 'Cliente',
-    'required' => false
+    'required' => false,
+    'placeholder' => 'Buscar cliente...',
+    'showCreateOption' => true
 ])
 
 @php
@@ -42,7 +44,7 @@
                 type="text" 
                 id="{{ $uniqueId }}_search"
                 class="cliente-search-input w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                placeholder="Buscar cliente o dejar vacío..."
+                placeholder="{{ $placeholder }}"
                 autocomplete="off"
             >
             <button 
@@ -62,11 +64,13 @@
                 <i class="fas fa-search text-2xl mb-2 text-gray-300"></i>
                 <p class="text-sm">No se encontraron clientes</p>
             </div>
-            <div class="cliente-all-option p-3 border-t border-gray-200 bg-gray-50 hover:bg-gray-100 cursor-pointer transition-colors">
-                <p class="text-sm font-medium text-gray-700">
-                    <i class="fas fa-plus-circle"></i> Crear nuevo cliente
-                </p>
-            </div>
+            @if($showCreateOption)
+                <div class="cliente-all-option p-3 border-t border-gray-200 bg-gray-50 hover:bg-gray-100 cursor-pointer transition-colors">
+                    <p class="text-sm font-medium text-gray-700">
+                        <i class="fas fa-plus-circle"></i> Crear nuevo cliente
+                    </p>
+                </div>
+            @endif
         </div>
     </div>
     
@@ -112,8 +116,6 @@
         </div>
     </div>
 </div>
-
-
 
 
 

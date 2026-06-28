@@ -83,7 +83,7 @@ class PagoController extends Controller
                 break;
         }
 
-        $ventas = $query->paginate(15);
+        $ventas = $query->paginate(10);
         $totalVentas = Venta::ventasAPlazo()->where('estado', '!=', 'cancelada')->count();
         $totalPendiente = Venta::ventasAPlazo()->where('estado', '!=', 'cancelada')->sum(DB::raw('total - total_pagado'));
 
@@ -157,10 +157,7 @@ class PagoController extends Controller
             $estadoAnterior = $venta->estado_pago;
             $venta->actualizarEstadoPago();
 
-            // Si la venta se completó, descontar el stock
-            if ($estadoAnterior !== 'completado' && $venta->estado_pago === 'completado') {
-                $this->stockService->deductSale($venta);
-            }
+
 
             DB::commit();
 
@@ -211,34 +208,7 @@ class PagoController extends Controller
             // Actualizar el estado de pago de la venta
             $venta->actualizarEstadoPago();
 
-            // Si antes estaba completado y ahora no, restaurar el stock
-            if ($estadoAnterior === 'completado' && $venta->estado_pago !== 'completado') {
-                $this->stockService->restoreSale($venta);
 
-                foreach ($venta->movimientos()->where('tipo_movimiento', 'salida')->with('libro')->get() as $movimiento) {
-                    $libro = $movimiento->libro;
-                    $esDeSubinventario = $venta->tipo_inventario === 'subinventario' && $venta->subinventario_id;
-                    $subinventarioId = $venta->subinventario_id;
-                    
-                    // Registrar movimiento de entrada por eliminación de pago
-                    $observaciones = 'Eliminación de pago en venta #' . $venta->id . ' (devuelto a pendiente)';
-                    if ($esDeSubinventario) {
-                        $observaciones .= ' - Devuelto a SubInv #' . $subinventarioId;
-                    }
-                    
-                    \App\Models\Movimiento::create([
-                        'libro_id' => $libro->id,
-                        'tipo_movimiento' => 'entrada',
-                        'tipo_entrada' => 'devolucion',
-                        'cantidad' => $movimiento->cantidad,
-                        'precio_unitario' => $movimiento->precio_unitario,
-                        'observaciones' => $observaciones,
-                        'fecha' => now(),
-                        'venta_id' => $venta->id,
-                        'usuario' => session('username', 'Sistema'),
-                    ]);
-                }
-            }
 
             DB::commit();
 

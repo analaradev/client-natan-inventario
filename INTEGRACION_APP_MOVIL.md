@@ -891,7 +891,13 @@ Flujo:
 
 ### **Recomendaciones Críticas**
 
-#### 1. **Implementar Laravel Sanctum (Autenticación API)**
+#### 1. **Autenticación API**
+
+**Estado implementado:** el proyecto usa autenticación por token externo `cod_congregante`, validado contra la API de `sistemasdevida.com`, mediante los middleware `secure.api` y `mobile.role`.
+
+**Nota:** Laravel Sanctum no se implementa aquí porque el control de usuarios no vive en este proyecto; proviene de una API externa. Agregar Sanctum implicaría crear tokens/usuarios locales y duplicar una autoridad que ya existe fuera del sistema.
+
+Referencia original evaluada:
 
 ```bash
 composer require laravel/sanctum
@@ -999,16 +1005,16 @@ Log::info('Venta creada desde API móvil', [
 
 ## 🔧 Checklist de Implementación
 
-- [ ] Crear endpoint `/api/v1/mis-subinventarios/{cod_congregante}`
-- [ ] Agregar validación de `cod_congregante` en `/api/v1/ventas`
-- [ ] Implementar Laravel Sanctum
-- [ ] Crear endpoint `/api/v1/login` para app móvil
-- [ ] Proteger rutas API con middleware `auth:sanctum`
-- [ ] Agregar rate limiting
-- [ ] Implementar logging de operaciones API
-- [ ] Documentar API con Postman o Swagger
-- [ ] Crear pruebas unitarias para endpoints
-- [ ] Configurar CORS adecuadamente
+- [x] Crear endpoint `/api/v1/mis-subinventarios/{cod_congregante}`
+- [x] Agregar validación de `cod_congregante` en `/api/v1/ventas`
+- [x] Evaluar Laravel Sanctum: no aplica porque los usuarios y tokens provienen de API externa
+- [x] Crear endpoint `/api/v1/login` para app móvil
+- [x] Proteger rutas API con middleware `secure.api` y `mobile.role`
+- [x] Agregar rate limiting
+- [x] Implementar logging de operaciones API
+- [x] Documentar API con Postman (`POSTMAN_API_MOVIL_COLLECTION.json`)
+- [x] Crear pruebas unitarias/feature para endpoints críticos
+- [x] Configurar CORS adecuadamente (`config/cors.php`)
 
 ---
 

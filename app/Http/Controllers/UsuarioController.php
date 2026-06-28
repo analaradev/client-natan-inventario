@@ -63,7 +63,7 @@ class UsuarioController extends Controller
                 $params['termino'] = $termino;
             }
 
-            $response = Http::post($endpoint, $params);
+            $response = Http::timeout(10)->post($endpoint, $params);
 
             if ($response->successful()) {
                 $data = $response->json();
@@ -95,7 +95,7 @@ class UsuarioController extends Controller
                 $error = 'No se pudo conectar con el servicio de congregantes';
                 Log::error('Error al obtener congregantes', [
                     'status' => $response->status(),
-                    'body' => $response->body()
+                    'body' => substr($response->body(), 0, 200)
                 ]);
             }
         } catch (\Exception $e) {
@@ -118,7 +118,7 @@ class UsuarioController extends Controller
      */
     private function buscarCongregantePorId($codCongregante, string $idCongregante): ?array
     {
-        $response = Http::post('https://www.sistemasdevida.com/pan/rest2/index.php/congregante/obtener_detallado', [
+        $response = Http::timeout(10)->post('https://www.sistemasdevida.com/pan/rest2/index.php/congregante/obtener_detallado', [
             'codCongregante' => $codCongregante,
             'idCongregante' => $idCongregante
         ]);
@@ -127,7 +127,7 @@ class UsuarioController extends Controller
             Log::warning('No se pudo buscar congregante por ID', [
                 'idCongregante' => $idCongregante,
                 'status' => $response->status(),
-                'body' => $response->body(),
+                'body' => substr($response->body(), 0, 200),
             ]);
 
             return null;
@@ -179,7 +179,7 @@ class UsuarioController extends Controller
         $codCongregante = session('codCongregante');
         
         try {
-            $response = Http::post('https://www.sistemasdevida.com/pan/rest2/index.php/congregante/obtener_detallado', [
+            $response = Http::timeout(10)->post('https://www.sistemasdevida.com/pan/rest2/index.php/congregante/obtener_detallado', [
                 'codCongregante' => $codCongregante,
                 'idCongregante' => $id
             ]);
@@ -199,7 +199,7 @@ class UsuarioController extends Controller
             } else {
                 Log::error('Error al obtener detalles del congregante', [
                     'status' => $response->status(),
-                    'body' => $response->body()
+                    'body' => substr($response->body(), 0, 200)
                 ]);
                 return redirect()->route('usuarios.index')
                     ->with('error', 'Error al conectar con el servicio');
@@ -221,7 +221,7 @@ class UsuarioController extends Controller
         $codCongregante = session('codCongregante');
         
         try {
-            $response = Http::post('https://www.sistemasdevida.com/pan/rest2/index.php/congregante/obtener_detallado', [
+            $response = Http::timeout(10)->post('https://www.sistemasdevida.com/pan/rest2/index.php/congregante/obtener_detallado', [
                 'codCongregante' => $codCongregante,
                 'idCongregante' => $id
             ]);
@@ -248,7 +248,7 @@ class UsuarioController extends Controller
             } else {
                 Log::error('Error al obtener detalles del congregante', [
                     'status' => $response->status(),
-                    'body' => $response->body()
+                    'body' => substr($response->body(), 0, 200)
                 ]);
                 return redirect()->route('usuarios.index')
                     ->with('error', 'Error al conectar con el servicio');
@@ -276,7 +276,7 @@ class UsuarioController extends Controller
 
         try {
             // Obtener roles actuales
-            $response = Http::post('https://www.sistemasdevida.com/pan/rest2/index.php/congregante/obtener_detallado', [
+            $response = Http::timeout(10)->post('https://www.sistemasdevida.com/pan/rest2/index.php/congregante/obtener_detallado', [
                 'codCongregante' => $codCongregante,
                 'idCongregante' => $id
             ]);
@@ -301,7 +301,7 @@ class UsuarioController extends Controller
 
             // Agregar roles nuevos
             foreach ($rolesAgregar as $rol) {
-                $rolResponse = Http::post('https://www.sistemasdevida.com/pan/rest2/index.php/rol/crear', [
+                $rolResponse = Http::timeout(10)->post('https://www.sistemasdevida.com/pan/rest2/index.php/rol/crear', [
                     'codCongregante' => $codCongregante,
                     'idCongregante' => $id,
                     'rol' => $rol
@@ -313,7 +313,7 @@ class UsuarioController extends Controller
                         'idCongregante' => $id,
                         'rol' => $rol,
                         'status' => $rolResponse->status(),
-                        'body' => $rolResponse->body()
+                        'body' => substr($rolResponse->body(), 0, 200)
                     ]);
                     $erroresRoles[] = 'No se pudo asignar el rol ' . $rol . '.';
                 }
@@ -321,7 +321,7 @@ class UsuarioController extends Controller
 
             // Remover roles
             foreach ($rolesRemover as $rol) {
-                $rolResponse = Http::post('https://www.sistemasdevida.com/pan/rest2/index.php/rol/baja', [
+                $rolResponse = Http::timeout(10)->post('https://www.sistemasdevida.com/pan/rest2/index.php/rol/baja', [
                     'codCongregante' => $codCongregante,
                     'idCongregante' => $id,
                     'rol' => $rol
@@ -333,7 +333,7 @@ class UsuarioController extends Controller
                         'idCongregante' => $id,
                         'rol' => $rol,
                         'status' => $rolResponse->status(),
-                        'body' => $rolResponse->body()
+                        'body' => substr($rolResponse->body(), 0, 200)
                     ]);
                     $erroresRoles[] = 'No se pudo remover el rol ' . $rol . '.';
                 }
@@ -371,7 +371,7 @@ class UsuarioController extends Controller
 
         try {
             // PASO 1: Crear congregante
-            $congreganteResponse = Http::post('https://sistemasdevida.com/pan/altaCongregante.php', [
+            $congreganteResponse = Http::timeout(10)->post('https://sistemasdevida.com/pan/altaCongregante.php', [
                 'nombre' => $request->nombre,
                 'apellidos' => $request->apellidos,
                 'fecAlta' => now()->format('d/m/Y'),
@@ -403,7 +403,7 @@ class UsuarioController extends Controller
             if (!$congreganteResponse->successful()) {
                 Log::error('Error al crear congregante', [
                     'status' => $congreganteResponse->status(),
-                    'body' => $congreganteResponse->body()
+                    'body' => substr($congreganteResponse->body(), 0, 200)
                 ]);
                 return back()->with('error', 'Error al crear el congregante en el sistema externo.')
                     ->withInput();
@@ -419,7 +419,7 @@ class UsuarioController extends Controller
             }
 
             // PASO 2: Asignar rol
-            $rolResponse = Http::post('https://sistemasdevida.com/pan/altaRol.php', [
+            $rolResponse = Http::timeout(10)->post('https://sistemasdevida.com/pan/altaRol.php', [
                 'idCon' => $idCongregante,
                 'rol' => $request->rol
             ]);
@@ -428,13 +428,13 @@ class UsuarioController extends Controller
                 Log::error('Error al asignar rol', [
                     'idCon' => $idCongregante,
                     'status' => $rolResponse->status(),
-                    'body' => $rolResponse->body()
+                    'body' => substr($rolResponse->body(), 0, 200)
                 ]);
                 // Continuamos aunque falle el rol
             }
 
             // PASO 3: Crear credenciales (SIN CIFRADO - contraseña plana)
-            $usuarioResponse = Http::post('https://sistemasdevida.com/pan/usuarios.php', [
+            $usuarioResponse = Http::timeout(10)->post('https://sistemasdevida.com/pan/usuarios.php', [
                 'idCon' => $idCongregante,
                 'us' => $request->usuario,
                 'pass' => $request->password  // Contraseña SIN cifrado
@@ -444,7 +444,7 @@ class UsuarioController extends Controller
                 Log::error('Error al crear usuario', [
                     'idCon' => $idCongregante,
                     'status' => $usuarioResponse->status(),
-                    'body' => $usuarioResponse->body()
+                    'body' => substr($usuarioResponse->body(), 0, 200)
                 ]);
                 return back()->with('error', 'Congregante creado, pero error al crear credenciales de acceso.')
                     ->withInput();

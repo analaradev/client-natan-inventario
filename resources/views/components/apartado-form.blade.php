@@ -507,7 +507,8 @@
             actualizarInstanciasLibroSearch();
         } else if (subinventarioSelect && subinventarioSelect.value) {
             // Cargar libros del subinventario seleccionado vía AJAX
-            fetch(`/api/v1/subinventarios/${subinventarioSelect.value}/libros`)
+            fetch(`/api/subinventarios/${subinventarioSelect.value}/libros`)
+
                 .then(response => response.json())
                 .then(data => {
                     if (data.success && data.data.libros) {

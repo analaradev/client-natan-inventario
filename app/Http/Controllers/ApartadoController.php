@@ -17,8 +17,12 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 
+use App\Traits\HasRoleChecks;
+
 class ApartadoController extends Controller
 {
+    use HasRoleChecks;
+
     protected $codeGenerator;
     protected $excelReportService;
     protected $pdfReportService;
@@ -95,7 +99,7 @@ class ApartadoController extends Controller
                 break;
         }
 
-        $apartados = $query->paginate(15)->withQueryString();
+        $apartados = $query->paginate(10)->withQueryString();
 
         // Estadísticas
         $estadisticas = [
@@ -172,8 +176,13 @@ class ApartadoController extends Controller
 
             // Calcular monto total y validar stock según tipo de inventario
             $montoTotal = 0;
-            foreach ($validated['libros'] as $libroData) {
+            $esAdmin = $this->isAdmin();
+            foreach ($validated['libros'] as &$libroData) {
                 $libro = Libro::find($libroData['libro_id']);
+                
+                if (!$esAdmin) {
+                    $libroData['precio_unitario'] = $libro->precio;
+                }
                 
                 if ($tipoInventario === 'subinventario') {
                     // Verificar que el libro esté en el subinventario
@@ -211,6 +220,7 @@ class ApartadoController extends Controller
                 $subtotal = $precio * $libroData['cantidad'];
                 $montoTotal += $subtotal;
             }
+            unset($libroData);
 
             // Validar que el enganche no sea mayor al total
             if ($validated['enganche'] > $montoTotal) {
@@ -732,6 +742,13 @@ class ApartadoController extends Controller
      */
     public function apiStore(Request $request)
     {
+        if (!$this->hasValidMobileRole($request)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No tienes autorización para crear apartados.'
+            ], 403);
+        }
+
         try {
             // Validar datos
             $validated = $request->validate([
@@ -764,6 +781,14 @@ class ApartadoController extends Controller
 
             // Determinar tipo de inventario (por defecto subinventario para retrocompatibilidad)
             $tipoInventario = $validated['tipo_inventario'] ?? 'subinventario';
+            $esAdmin = $this->isAdminFromRequest($request);
+
+            if ($tipoInventario === 'general' && !$esAdmin) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No tienes permiso para crear apartados en el inventario general. Solo Admin Librería y Supervisor.'
+                ], 403);
+            }
             
             // Si es subinventario, validar que se proporcione subinventario_id
             if ($tipoInventario === 'subinventario') {
@@ -782,17 +807,6 @@ class ApartadoController extends Controller
                         'message' => 'El punto de venta no está activo'
                     ], 422);
                 }
-
-                $tieneAsignacion = DB::table('subinventario_user')
-                    ->where('subinventario_id', $validated['subinventario_id'])
-                    ->where('cod_congregante', $validated['cod_congregante'])
-                    ->exists();
-                if (!$tieneAsignacion) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'El usuario no está asignado a este punto de venta'
-                    ], 403);
-                }
             } else {
                 $subinventario = null;
             }
@@ -804,8 +818,12 @@ class ApartadoController extends Controller
 
             // Calcular monto total y validar stock según tipo de inventario
             $montoTotal = 0;
-            foreach ($validated['libros'] as $libroData) {
+            foreach ($validated['libros'] as &$libroData) {
                 $libro = Libro::find($libroData['libro_id']);
+                
+                if (!$esAdmin) {
+                    $libroData['precio_unitario'] = $libro->precio;
+                }
                 
                 if ($tipoInventario === 'subinventario') {
                     // Verificar que el libro esté en el subinventario
@@ -845,6 +863,7 @@ class ApartadoController extends Controller
                 $subtotal = $precio * $libroData['cantidad'];
                 $montoTotal += $subtotal;
             }
+            unset($libroData);
 
             // Validar que el enganche no sea mayor al total
             if ($validated['enganche'] > $montoTotal) {
@@ -937,11 +956,18 @@ class ApartadoController extends Controller
             ], 422);
         } catch (\Exception $e) {
             DB::rollBack();
+            $requestData = $request->except(['_token']);
+            if (isset($requestData['cod_congregante'])) {
+                $requestData['cod_congregante'] = '***';
+            }
+            if (isset($requestData['password'])) {
+                $requestData['password'] = '***';
+            }
             
             Log::error('Error al crear apartado desde API', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
-                'data' => $request->except(['_token']),
+                'data' => $requestData,
             ]);
             
             return response()->json([

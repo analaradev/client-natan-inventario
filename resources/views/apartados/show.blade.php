@@ -141,10 +141,10 @@
                         </div>
 
                         <!-- Información del libro -->
-                        <div class="flex-1">
+                        <div class="flex-1 min-w-0">
                             <div class="flex justify-between items-start mb-3">
-                                <div>
-                                    <h3 class="font-semibold text-gray-900 text-base">
+                                <div class="min-w-0 pr-3">
+                                    <h3 class="font-semibold text-gray-900 text-base break-words">
                                         {{ $detalle->libro->nombre }}
                                     </h3>
                                     <p class="text-sm text-gray-600">

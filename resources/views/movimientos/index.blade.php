@@ -178,8 +178,8 @@
                             <div class="text-gray-500">{{ $movimiento->created_at->format('H:i') }}</div>
                         </div>
                     </x-table-cell>
-                    <x-table-cell>
-                        <div class="text-sm">
+                    <x-table-cell wrap class="max-w-lg">
+                        <div class="text-sm break-words">
                             @if($movimiento->libro)
                                 <div class="font-medium text-gray-900">{{ $movimiento->libro->nombre }}</div>
                                 <div class="text-gray-500 text-xs">{{ $movimiento->libro->codigo_barras }}</div>

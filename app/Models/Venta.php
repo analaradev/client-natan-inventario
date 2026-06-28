@@ -4,10 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\Auditable;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Venta extends Model
 {
-    use HasFactory;
+    use HasFactory, Auditable, SoftDeletes;
 
     protected $fillable = [
         'cliente_id',
@@ -55,7 +57,7 @@ class Venta extends Model
      */
     public function cliente()
     {
-        return $this->belongsTo(Cliente::class);
+        return $this->belongsTo(Cliente::class)->withTrashed();
     }
 
     /**
@@ -88,7 +90,7 @@ class Venta extends Model
      */
     public function subinventario()
     {
-        return $this->belongsTo(SubInventario::class);
+        return $this->belongsTo(SubInventario::class)->withTrashed();
     }
 
     /**

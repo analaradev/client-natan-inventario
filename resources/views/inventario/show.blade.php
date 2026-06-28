@@ -49,13 +49,17 @@
                         <div class="space-y-2">
                             <p class="text-lg font-semibold">
                                 <span class="px-3 py-1 rounded-full text-sm {{ $libro->stock_total > 10 ? 'bg-green-100 text-green-800' : ($libro->stock_total > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800') }}">
-                                    Total: {{ $libro->stock_total }} unidades
+                                    Total Físico: {{ $libro->stock_total }} unidades
                                 </span>
                             </p>
-                            <p class="text-sm text-gray-600">
-                                <span class="font-medium">General:</span> {{ $libro->stock }} | 
-                                <span class="font-medium">Subinventarios:</span> {{ $libro->stock_subinventario }}
-                            </p>
+                            <div class="text-sm text-gray-600 space-y-1">
+                                <div><span class="font-medium text-gray-800">General Disponible:</span> {{ $libro->stock_general_disponible }}</div>
+                                <div><span class="font-medium text-gray-800">Subinventarios (Disponibles):</span> {{ $libro->stock_subinventario }}</div>
+                                <div><span class="font-medium text-gray-800">Apartados (Total):</span> {{ $libro->stock_apartado }}</div>
+                                <div class="text-xs text-gray-400 mt-1">
+                                    (Apartado General: {{ $libro->stock_apartado_general }} | Apartado Subinventario: {{ $libro->stock_apartado_subinventario }})
+                                </div>
+                            </div>
                         </div>
                     </div>
 

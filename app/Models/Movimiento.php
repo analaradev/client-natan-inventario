@@ -4,9 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Traits\Auditable;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Movimiento extends Model
 {
+    use Auditable, SoftDeletes;
     protected $fillable = [
         'libro_id',
         'venta_id',
@@ -33,7 +36,7 @@ class Movimiento extends Model
     // Relación con Libro
     public function libro(): BelongsTo
     {
-        return $this->belongsTo(Libro::class);
+        return $this->belongsTo(Libro::class)->withTrashed();
     }
 
     // Relación con Venta

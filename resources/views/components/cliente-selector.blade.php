@@ -20,7 +20,7 @@
         <input 
             type="text" 
             id="cliente_search" 
-            placeholder="Buscar cliente o dejar vacío..."
+            placeholder="Buscar cliente..."
             autocomplete="off"
             value="{{ old('cliente_nombre', $venta?->cliente?->nombre) }}"
             class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">

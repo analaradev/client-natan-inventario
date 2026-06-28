@@ -118,12 +118,7 @@ class InventoryStockService
                 throw new \DomainException("El stock apartado de '{$libro->nombre}' es inconsistente");
             }
 
-            if (!$this->isSubinventory($apartado)) {
-                if ((int) $libro->stock < $cantidad) {
-                    throw new \DomainException("Stock insuficiente para liquidar '{$libro->nombre}'");
-                }
-                $libro->decrement('stock', $cantidad);
-            }
+
 
             $libro->decrement('stock_apartado', $cantidad);
         }

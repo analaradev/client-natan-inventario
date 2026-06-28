@@ -7,9 +7,12 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Log;
 use App\Helpers\AuthHelper;
+use App\Traits\HasRoleChecks;
 
 class AuthController extends Controller
 {
+    use HasRoleChecks;
+
     /**
      * Muestra el formulario de login
      */
@@ -45,7 +48,7 @@ class AuthController extends Controller
 
         try {
             // Llamar a la API de login
-            $response = Http::post('https://www.sistemasdevida.com/pan/rest2/index.php/app/login', [
+            $response = Http::timeout(10)->post('https://www.sistemasdevida.com/pan/rest2/index.php/app/login', [
                 'user' => $request->user,
                 'contra' => $request->contra,
             ]);
@@ -53,7 +56,7 @@ class AuthController extends Controller
             if (!$response->successful()) {
                 Log::error('Error en API de login', [
                     'status' => $response->status(),
-                    'body' => $response->body()
+                    'body' => substr($response->body(), 0, 200)
                 ]);
                 
                 return back()->with('error', 'Error al conectar con el servidor de autenticación.')
@@ -104,7 +107,6 @@ class AuthController extends Controller
 
                 Log::info('Usuario autenticado correctamente', [
                     'user' => $request->user,
-                    'codCongregante' => $data['token']
                 ]);
 
                 return redirect()->intended(route('dashboard'))
@@ -136,5 +138,92 @@ class AuthController extends Controller
         
         return redirect()->route('login')
             ->with('success', 'Sesión cerrada correctamente');
+    }
+
+    /**
+     * Login para app movil. Valida contra el sistema externo y devuelve el
+     * token cod_congregante que despues protege las rutas API.
+     */
+    public function apiLogin(Request $request)
+    {
+        $validated = $request->validate([
+            'user' => 'required|string',
+            'contra' => 'required|string',
+        ]);
+
+        try {
+            $response = Http::timeout(10)->post('https://www.sistemasdevida.com/pan/rest2/index.php/app/login', $validated);
+
+            if (!$response->successful()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Credenciales inválidas'
+                ], 401);
+            }
+
+            $data = $response->json();
+
+            if (($data['error'] ?? false) === true || empty($data['token'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Credenciales inválidas'
+                ], 401);
+            }
+
+            $roles = $data['roles'] ?? [];
+            if (!$this->rolesAllowMobileAccess($roles)) {
+                Log::warning('Login móvil rechazado por rol no autorizado', [
+                    'user' => $validated['user'],
+                    'roles' => $roles,
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No tienes permisos para usar la app móvil'
+                ], 403);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Login correcto',
+                'data' => [
+                    'cod_congregante' => $data['token'],
+                    'username' => $validated['user'],
+                    'roles' => $roles,
+                    'codCasaVida' => $data['codCasaVida'] ?? null,
+                    'codHogar' => $data['codHogar'] ?? null,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Excepción en login móvil', [
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al conectar con el servidor de autenticación'
+            ], 502);
+        }
+    }
+
+    private function rolesAllowMobileAccess(array $roles): bool
+    {
+        foreach ($roles as $rol) {
+            $rolNombre = '';
+            $rolId = null;
+
+            if (is_array($rol)) {
+                $rolNombre = $rol['ROL'] ?? $rol['rol'] ?? '';
+                $rolId = $rol['ID'] ?? $rol['id'] ?? $rol['ROL_ID'] ?? $rol['rol_id'] ?? $rol['CODROL'] ?? $rol['codrol'] ?? null;
+            } else {
+                $rolNombre = (string) $rol;
+            }
+
+            if ($this->isMobileAuthorizedRole($this->normalizeRoleName($rolNombre), $rolId)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

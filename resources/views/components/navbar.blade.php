@@ -1,90 +1,96 @@
 <!-- Navbar -->
+<style>
+    #navbar.navbar-compact .nav-label {
+        display: none;
+    }
+
+    #navbar.navbar-compact .nav-icon {
+        margin-right: 0;
+    }
+</style>
+
 <nav id="navbar" class="fixed top-0 left-0 right-0 bg-white border-b border-gray-200 z-50">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex items-center justify-between h-16">
-            <!-- Logo y nombre -->
+        <div class="flex items-center justify-between h-16" data-navbar-inner>
+            <!-- Logo -->
             <div class="flex items-center gap-3">
                 <div class="w-10 h-10 bg-gradient-to-br from-gray-800 to-gray-600 rounded-xl flex items-center justify-center shadow-md">
                     <i class="fas fa-dove text-white text-lg"></i>
                 </div>
-                <div>
-                    <h1 class="text-lg font-bold text-gray-800">Pan de Vida</h1>
-                    <p class="text-xs text-gray-500">Control Interno</p>
-                </div>
             </div>
 
             <!-- Menú Desktop -->
-            <div class="hidden md:flex items-center space-x-1">
+            <div class="hidden md:flex items-center space-x-1" data-navbar-menu>
                 <a href="{{ route('dashboard') }}" 
-                   class="px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150
+                   class="px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 whitespace-nowrap
                           {{ request()->routeIs('dashboard') 
                               ? 'bg-gray-800 text-white' 
                               : 'text-gray-700 hover:bg-gray-100' }}">
-                    <i class="fas fa-home mr-2"></i>
-                    Dashboard
+                    <i class="fas fa-home nav-icon mr-2"></i>
+                    <span class="nav-label">Dashboard</span>
                 </a>
                 
                 <a href="{{ route('inventario.index') }}" 
-                   class="px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150
+                   class="px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 whitespace-nowrap
                           {{ request()->routeIs('inventario.*') 
                               ? 'bg-gray-800 text-white' 
                               : 'text-gray-700 hover:bg-gray-100' }}">
-                    <i class="fas fa-boxes mr-2"></i>
-                    Inventario
+                    <i class="fas fa-boxes nav-icon mr-2"></i>
+                    <span class="nav-label">Inventario</span>
                 </a>
                 
                 <a href="{{ route('movimientos.index') }}" 
-                   class="px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150
+                   class="px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 whitespace-nowrap
                           {{ request()->routeIs('movimientos.*') 
                               ? 'bg-gray-800 text-white' 
                               : 'text-gray-700 hover:bg-gray-100' }}">
-                    <i class="fas fa-exchange-alt mr-2"></i>
-                    Movimientos
+                    <i class="fas fa-exchange-alt nav-icon mr-2"></i>
+                    <span class="nav-label">Movimientos</span>
                 </a>
                 
                 <a href="{{ route('ventas.index') }}" 
-                   class="px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150
+                   class="px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 whitespace-nowrap
                           {{ request()->routeIs('ventas.*') && !request()->routeIs('ventas.pagos.*')
                               ? 'bg-gray-800 text-white' 
                               : 'text-gray-700 hover:bg-gray-100' }}">
-                    <i class="fas fa-cash-register mr-2"></i>
-                    Ventas
+                    <i class="fas fa-cash-register nav-icon mr-2"></i>
+                    <span class="nav-label">Ventas</span>
                 </a>
                 
                 <a href="{{ route('apartados.index') }}" 
-                   class="px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150
+                   class="px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 whitespace-nowrap
                           {{ request()->routeIs('apartados.*')
                               ? 'bg-gray-800 text-white' 
                               : 'text-gray-700 hover:bg-gray-100' }}">
-                    <i class="fas fa-handshake mr-2"></i>
-                    Apartados
+                    <i class="fas fa-handshake nav-icon mr-2"></i>
+                    <span class="nav-label">Apartados</span>
                 </a>
                 
                 <a href="{{ route('envios.index') }}" 
-                   class="px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150
+                   class="px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 whitespace-nowrap
                           {{ request()->routeIs('envios.*') 
                               ? 'bg-gray-800 text-white' 
                               : 'text-gray-700 hover:bg-gray-100' }}">
-                    <i class="fas fa-shipping-fast mr-2"></i>
-                    Envíos
+                    <i class="fas fa-shipping-fast nav-icon mr-2"></i>
+                    <span class="nav-label">Envíos</span>
                 </a>
                 
                 <a href="{{ route('clientes.index') }}" 
-                   class="px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150
+                   class="px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 whitespace-nowrap
                           {{ request()->routeIs('clientes.*') 
                               ? 'bg-gray-800 text-white' 
                               : 'text-gray-700 hover:bg-gray-100' }}">
-                    <i class="fas fa-user-friends mr-2"></i>
-                    Clientes
+                    <i class="fas fa-user-friends nav-icon mr-2"></i>
+                    <span class="nav-label">Clientes</span>
                 </a>
                 
                 <a href="{{ route('usuarios.index') }}" 
-                   class="px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150
+                   class="px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 whitespace-nowrap
                           {{ request()->routeIs('usuarios.*') 
                               ? 'bg-gray-800 text-white' 
                               : 'text-gray-700 hover:bg-gray-100' }}">
-                    <i class="fas fa-users mr-2"></i>
-                    Usuarios
+                    <i class="fas fa-users nav-icon mr-2"></i>
+                    <span class="nav-label">Usuarios</span>
                 </a>
             </div>
 
@@ -261,6 +267,28 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const navbar = document.getElementById('navbar');
+    const navbarInner = navbar?.querySelector('[data-navbar-inner]');
+    const navbarMenu = navbar?.querySelector('[data-navbar-menu]');
+
+    function ajustarNavbar() {
+        if (!navbar || !navbarInner || !navbarMenu) return;
+
+        navbar.classList.remove('navbar-compact');
+        requestAnimationFrame(() => {
+            const sePasa = navbarInner.scrollWidth > navbarInner.clientWidth + 1
+                || navbarMenu.scrollWidth > navbarMenu.clientWidth + 1;
+
+            navbar.classList.toggle('navbar-compact', sePasa);
+        });
+    }
+
+    ajustarNavbar();
+    window.addEventListener('resize', ajustarNavbar);
+    if ('ResizeObserver' in window && navbarInner) {
+        new ResizeObserver(ajustarNavbar).observe(navbarInner);
+    }
+
     const mobileMenuBtn = document.getElementById('mobileMenuBtn');
     const mobileMenu = document.getElementById('mobileMenu');
     

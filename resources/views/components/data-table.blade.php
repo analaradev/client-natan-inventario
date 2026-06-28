@@ -7,8 +7,8 @@
     'showActions' => true,
 ])
 
-<div class="overflow-x-auto">
-    <table class="min-w-full divide-y divide-gray-200">
+<div class="w-full overflow-hidden">
+    <table class="w-full table-fixed divide-y divide-gray-200" style="width: 100%; table-layout: fixed;">
         <thead class="bg-gray-50">
             <tr>
                 @foreach($headers as $header)

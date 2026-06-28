@@ -4,9 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use App\Traits\Auditable;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class SubInventario extends Model
 {
+    use Auditable, SoftDeletes;
     protected $table = 'subinventarios';
     
     protected $fillable = [
@@ -183,5 +186,13 @@ class SubInventario extends Model
         ]);
 
         return true;
+    }
+
+    /**
+     * Relación: Un subinventario puede tener muchos apartados
+     */
+    public function apartados()
+    {
+        return $this->hasMany(Apartado::class, 'subinventario_id');
     }
 }

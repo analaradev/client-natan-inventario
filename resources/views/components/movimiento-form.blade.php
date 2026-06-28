@@ -7,6 +7,16 @@
 <form action="{{ $action }}" method="POST" id="movimientoForm">
     @csrf
 
+    <div id="stockValidationBanner" class="hidden mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-800">
+        <div class="flex items-start gap-3">
+            <i class="fas fa-exclamation-triangle mt-0.5 text-red-500"></i>
+            <div>
+                <p class="font-semibold">Stock insuficiente</p>
+                <p class="text-sm" id="stockValidationMessage"></p>
+            </div>
+        </div>
+    </div>
+
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <!-- Selección de Libro con Buscador -->
         <div class="lg:col-span-2">
@@ -245,6 +255,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const precioInfo = document.getElementById('precioInfo');
     const precioOriginalSpan = document.getElementById('precioOriginal');
     const precioFinalTexto = document.getElementById('precioFinalTexto');
+    const stockValidationBanner = document.getElementById('stockValidationBanner');
+    const stockValidationMessage = document.getElementById('stockValidationMessage');
     
     // Verificar que los elementos existan
     if (!cantidadInput || !libroIdInput || !stockInfo || !descuentoInput || !precioInfo) {
@@ -255,6 +267,22 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentStock = null;
     let currentTipo = null;
     let currentPrecio = null;
+
+    function hideStockValidationBanner() {
+        if (stockValidationBanner) {
+            stockValidationBanner.classList.add('hidden');
+        }
+    }
+
+    function showStockValidationBanner(cantidad) {
+        if (!stockValidationBanner || !stockValidationMessage) {
+            return;
+        }
+
+        stockValidationMessage.textContent = `Stock actual: ${currentStock} unidades. Cantidad solicitada: ${cantidad} unidades. Faltante: ${cantidad - currentStock} unidades.`;
+        stockValidationBanner.classList.remove('hidden');
+        stockValidationBanner.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
     
     // Función para actualizar el precio con descuento
     function updatePrecioConDescuento() {
@@ -373,12 +401,14 @@ document.addEventListener('DOMContentLoaded', function() {
     // Actualizar stock resultante cuando cambie la cantidad
     cantidadInput.addEventListener('input', function() {
         console.log('Cantidad input:', this.value);
+        hideStockValidationBanner();
         updateStockResultante();
     });
     
     // También actualizar al cambiar con las flechas o scroll
     cantidadInput.addEventListener('change', function() {
         console.log('Cantidad change:', this.value);
+        hideStockValidationBanner();
         updateStockResultante();
     });
 
@@ -417,7 +447,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             if (cantidad > currentStock) {
                 e.preventDefault();
-                alert(`Stock Insuficiente\n\nStock actual: ${currentStock} unidades\nCantidad solicitada: ${cantidad} unidades\nFaltante: ${cantidad - currentStock} unidades`);
+                showStockValidationBanner(cantidad);
             }
         }
     });

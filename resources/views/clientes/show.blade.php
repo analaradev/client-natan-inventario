@@ -100,7 +100,7 @@
                         Volver al Listado
                     </x-button>
                     
-                    @if($cliente->ventas->count() == 0)
+                    @if($cliente->ventas->count() == 0 && $cliente->apartados->count() == 0)
                         <form action="{{ route('clientes.destroy', $cliente->id) }}" method="POST">
                             @csrf
                             @method('DELETE')
@@ -118,7 +118,7 @@
                         <div class="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                             <p class="text-xs text-yellow-800">
                                 <i class="fas fa-info-circle mr-1"></i>
-                                No se puede eliminar porque tiene ventas asociadas
+                                No se puede eliminar porque tiene ventas o apartados asociados
                             </p>
                         </div>
                     @endif
@@ -211,15 +211,15 @@
     @endif
 
     <!-- Historial de ventas -->
-    @if($cliente->ventas->count() > 0)
+    @if($ventas->count() > 0)
         <x-card title="Historial de Ventas">
             <x-data-table 
-                :headers="['Código', 'Fecha', 'Total', 'Estado', 'Acciones']"
-                :rows="$cliente->ventas"
+                :headers="['Código', 'Fecha', 'Total', 'Estado']"
+                :rows="$ventas"
                 emptyMessage="No hay ventas registradas"
                 emptyIcon="fas fa-shopping-cart"
             >
-                @foreach($cliente->ventas as $venta)
+                @foreach($ventas as $venta)
                     <x-data-table-row class="{{ $venta->estado === 'cancelada' ? 'opacity-60 bg-gray-50' : '' }}">
                         <x-data-table-cell bold>
                             #{{ $venta->id }}
@@ -255,6 +255,13 @@
                     </x-data-table-row>
                 @endforeach
             </x-data-table>
+
+            <!-- Paginación -->
+            @if($ventas->hasPages())
+                <div class="mt-4 px-6 py-4 border-t border-gray-200">
+                    {{ $ventas->appends(request()->except(['ventas_page', 'apartados_page']))->links() }}
+                </div>
+            @endif
         </x-card>
     @else
         <x-card>
@@ -270,6 +277,68 @@
                     Crear Nueva Venta
                 </x-button>
             </div>
+        </x-card>
+    @endif
+
+    <!-- Historial de apartados -->
+    @if($apartados->count() > 0)
+        <x-card title="Historial de Apartados">
+            <x-data-table
+                :headers="['Folio', 'Fecha', 'Libros', 'Total', 'Pagado / Saldo', 'Estado']"
+                :rows="$apartados"
+                emptyMessage="No hay apartados registrados"
+                emptyIcon="fas fa-handshake"
+            >
+                @foreach($apartados as $apartado)
+                    <x-data-table-row class="{{ $apartado->estado === 'cancelado' ? 'opacity-60 bg-gray-50' : '' }}">
+                        <x-data-table-cell bold>
+                            {{ $apartado->folio }}
+                            <span class="block text-xs text-gray-500">#{{ $apartado->id }}</span>
+                        </x-data-table-cell>
+                        <x-data-table-cell>
+                            {{ $apartado->fecha_apartado->format('d/m/Y') }}
+                            @if($apartado->fecha_limite)
+                                <span class="block text-xs {{ $apartado->estaVencido ? 'text-red-600 font-semibold' : 'text-gray-500' }}">
+                                    <i class="fas fa-clock mr-1"></i>Vence: {{ $apartado->fecha_limite->format('d/m/Y') }}
+                                </span>
+                            @endif
+                        </x-data-table-cell>
+                        <x-data-table-cell>
+                            {{ $apartado->detalles_count }} libro(s)
+                        </x-data-table-cell>
+                        <x-data-table-cell>
+                            ${{ number_format($apartado->monto_total, 2) }}
+                        </x-data-table-cell>
+                        <x-data-table-cell>
+                            <span class="block text-sm text-green-600 font-medium">
+                                <i class="fas fa-check mr-1"></i>${{ number_format($apartado->totalPagado, 2) }}
+                            </span>
+                            <span class="block text-sm text-orange-600">
+                                <i class="fas fa-exclamation-circle mr-1"></i>${{ number_format($apartado->saldo_pendiente, 2) }}
+                            </span>
+                            <span class="block text-xs text-gray-500">{{ $apartado->porcentajePagado }}% pagado</span>
+                        </x-data-table-cell>
+                        <x-data-table-cell>
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ $apartado->getBadgeColor() }}">
+                                <i class="{{ $apartado->getIcon() }} mr-1"></i>
+                                {{ $apartado->getEstadoLabel() }}
+                            </span>
+                        </x-data-table-cell>
+                        <x-data-table-cell>
+                            <a href="{{ route('apartados.show', $apartado->id) }}"
+                               class="text-blue-600 hover:text-blue-800 transition-colors font-medium text-sm">
+                                <i class="fas fa-eye mr-1"></i> Ver detalles
+                            </a>
+                        </x-data-table-cell>
+                    </x-data-table-row>
+                @endforeach
+            </x-data-table>
+
+            @if($apartados->hasPages())
+                <div class="mt-4 px-6 py-4 border-t border-gray-200">
+                    {{ $apartados->appends(request()->except(['ventas_page', 'apartados_page']))->links() }}
+                </div>
+            @endif
         </x-card>
     @endif
 </x-page-layout>

@@ -265,7 +265,7 @@ class SubInventarioWebTest extends TestCase
             ->delete(route('subinventarios.destroy', $sub));
 
         $response->assertRedirect(route('subinventarios.index'));
-        $this->assertDatabaseMissing('subinventarios', [
+        $this->assertSoftDeleted('subinventarios', [
             'id' => $sub->id
         ]);
 

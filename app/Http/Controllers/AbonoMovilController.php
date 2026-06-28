@@ -9,8 +9,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
+use App\Traits\HasRoleChecks;
+
 class AbonoMovilController extends Controller
 {
+    use HasRoleChecks;
     /**
      * Listar todos los apartados activos/vencidos
      * GET /api/v1/movil/apartados
@@ -20,7 +23,10 @@ class AbonoMovilController extends Controller
         try {
             // Parámetros opcionales para filtrar
             $estado = $request->query('estado'); // activo, vencido, todos
-            $limite = $request->query('limite', 50); // Por defecto 50 apartados
+            $limite = (int) $request->query('limite', 50); // Por defecto 50 apartados
+            if ($limite < 1 || $limite > 100) {
+                $limite = 50;
+            }
             
             $query = Apartado::with(['cliente', 'detalles.libro', 'abonos']);
             
@@ -75,6 +81,7 @@ class AbonoMovilController extends Controller
                 $apartados = Apartado::with(['cliente', 'detalles.libro', 'abonos'])
                     ->whereIn('estado', ['activo', 'vencido'])
                     ->orderBy('fecha_apartado', 'desc')
+                    ->limit(50)
                     ->get();
 
                 if ($apartados->isEmpty()) {
@@ -148,8 +155,10 @@ class AbonoMovilController extends Controller
                 $clientes = Cliente::with(['apartados' => function ($query) {
                         $query->whereIn('estado', ['activo', 'vencido'])
                             ->with(['detalles.libro', 'abonos'])
-                            ->orderBy('fecha_apartado', 'desc');
+                            ->orderBy('fecha_apartado', 'desc')
+                            ->limit(10);
                     }])
+                    ->limit(50)
                     ->get();
 
                 // Filtrar clientes que tengan apartados activos
@@ -188,8 +197,10 @@ class AbonoMovilController extends Controller
                 ->with(['apartados' => function ($query) {
                     $query->whereIn('estado', ['activo', 'vencido'])
                         ->with(['detalles.libro', 'abonos'])
-                        ->orderBy('fecha_apartado', 'desc');
+                        ->orderBy('fecha_apartado', 'desc')
+                        ->limit(10);
                 }])
+                ->limit(50)
                 ->get();
 
             if ($clientes->isEmpty()) {
@@ -308,8 +319,8 @@ class AbonoMovilController extends Controller
             // Actualizar saldo del apartado
             $apartado->saldo_pendiente = $saldoAnterior - $request->monto;
 
-            // Si el saldo llega a 0, liquidar automáticamente
-            if ($apartado->saldo_pendiente == 0) {
+            // Si el saldo llega a 0 (con precisión de 2 decimales), liquidar automáticamente
+            if (bccomp((string) round($apartado->saldo_pendiente, 2), '0', 2) <= 0) {
                 // 1. Crear la venta
                 $venta = \App\Models\Venta::create([
                     'cliente_id' => $apartado->cliente_id,
@@ -602,8 +613,8 @@ class AbonoMovilController extends Controller
             'observaciones' => $apartado->observaciones,
             'libros' => $apartado->detalles->map(function ($detalle) {
                 return [
-                    'codigo' => $detalle->libro->codigo ?? 'N/A',
-                    'titulo' => $detalle->libro->titulo ?? 'Sin título',
+                    'codigo' => $detalle->libro?->codigo_barras ?? 'N/A',
+                    'titulo' => $detalle->libro?->nombre ?? 'Sin título',
                     'precio_unitario' => $detalle->precio_unitario,
                     'cantidad' => $detalle->cantidad,
                     'subtotal' => $detalle->subtotal

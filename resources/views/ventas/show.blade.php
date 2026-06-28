@@ -159,11 +159,11 @@
                         </div>
 
                         <!-- Información del libro -->
-                        <div class="flex-1">
+                        <div class="flex-1 min-w-0">
                             <div class="flex justify-between items-start mb-3">
-                                <div>
+                                <div class="min-w-0 pr-3">
                                     @if($movimiento->libro)
-                                        <h3 class="font-semibold text-gray-900 text-base">
+                                        <h3 class="font-semibold text-gray-900 text-base break-words">
                                             {{ $movimiento->libro->nombre }}
                                         </h3>
                                         <p class="text-sm text-gray-600">
@@ -240,6 +240,82 @@
             @endforeach
         </div>
     </x-card>
+
+    @if($venta->pagos->count() > 0)
+        <x-card title="Historial de Pagos">
+            <div class="space-y-3">
+                @foreach($venta->pagos->sortByDesc('fecha_pago') as $pago)
+                    <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                        <div class="flex items-start gap-4">
+                            <div class="flex-shrink-0">
+                                <div class="w-14 h-14 bg-green-100 rounded-lg flex items-center justify-center">
+                                    <i class="fas fa-dollar-sign text-green-600 text-lg"></i>
+                                </div>
+                            </div>
+
+                            <div class="flex-1 min-w-0">
+                                <div class="flex justify-between items-start mb-3">
+                                    <div class="min-w-0 pr-3">
+                                        <h3 class="text-lg font-bold text-green-600">
+                                            ${{ number_format($pago->monto, 2) }}
+                                        </h3>
+                                        <p class="text-sm text-gray-500">
+                                            Pago registrado el {{ \Carbon\Carbon::parse($pago->fecha_pago)->format('d/m/Y') }}
+                                        </p>
+                                    </div>
+
+                                    @if($isAdminLibreria && $venta->estado !== 'cancelada')
+                                        <form action="{{ route('pagos.destroy', $pago) }}" method="POST" 
+                                              onsubmit="return confirm('¿Estás seguro de eliminar este pago?')">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" 
+                                                    class="text-red-600 hover:text-red-700 p-2 rounded-lg hover:bg-red-50 transition-colors"
+                                                    title="Eliminar pago">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </form>
+                                    @endif
+                                </div>
+
+                                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    <div>
+                                        <p class="text-xs text-gray-500 mb-1">Fecha</p>
+                                        <p class="text-sm font-semibold text-gray-900">
+                                            <i class="fas fa-calendar text-gray-400 mr-1"></i>
+                                            {{ \Carbon\Carbon::parse($pago->fecha_pago)->format('d/m/Y') }}
+                                        </p>
+                                    </div>
+
+                                    <div>
+                                        <p class="text-xs text-gray-500 mb-1">Método</p>
+                                        <p class="text-sm font-semibold text-gray-800 capitalize">
+                                            <i class="fas fa-credit-card text-gray-400 mr-1"></i>
+                                            {{ $pago->metodo_pago }}
+                                        </p>
+                                    </div>
+
+                                    <div>
+                                        <p class="text-xs text-gray-500 mb-1">Comprobante</p>
+                                        <p class="text-sm font-semibold text-gray-800 font-mono break-words">
+                                            {{ $pago->comprobante ?: 'N/A' }}
+                                        </p>
+                                    </div>
+
+                                    <div>
+                                        <p class="text-xs text-gray-500 mb-1">Registrado</p>
+                                        <p class="text-sm text-gray-700">
+                                            {{ $pago->created_at->format('d/m/Y H:i') }}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+        </x-card>
+    @endif
 
     <!-- Información de fechas y acciones -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">

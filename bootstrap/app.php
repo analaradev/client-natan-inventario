@@ -20,6 +20,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'checkauth' => \App\Http\Middleware\CheckAuth::class,
             'admin.libreria' => \App\Http\Middleware\CheckAdminLibreria::class,
+            'sales.operations' => \App\Http\Middleware\CheckSalesOperations::class,
+            'secure.api' => \App\Http\Middleware\SecureApiMiddleware::class,
+            'mobile.role' => \App\Http\Middleware\RequireMobileRole::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

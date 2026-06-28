@@ -4,9 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Traits\Auditable;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Abono extends Model
 {
+    use Auditable, SoftDeletes;
     protected $fillable = [
         'apartado_id',
         'fecha_abono',
@@ -31,7 +34,7 @@ class Abono extends Model
      */
     public function apartado(): BelongsTo
     {
-        return $this->belongsTo(Apartado::class);
+        return $this->belongsTo(Apartado::class)->withTrashed();
     }
 
     /**

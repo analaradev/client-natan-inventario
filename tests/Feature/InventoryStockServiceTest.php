@@ -32,15 +32,13 @@ class InventoryStockServiceTest extends TestCase
         $sub = $this->subinventory();
         $sub->libros()->attach($libro->id, ['cantidad' => 8]);
         $venta = $this->sale('subinventario', $sub->id);
-        $this->movement($venta, $libro, 3);
-
-        DB::transaction(fn () => $this->service->deductSale($venta));
+        $movement = $this->movement($venta, $libro, 3);
 
         $this->assertSame(20, $libro->fresh()->stock);
         $this->assertSame(5, $libro->fresh()->stock_subinventario);
         $this->assertDatabaseHas('subinventario_libro', ['subinventario_id' => $sub->id, 'libro_id' => $libro->id, 'cantidad' => 5]);
 
-        DB::transaction(fn () => $this->service->restoreSale($venta));
+        $movement->delete();
 
         $this->assertSame(20, $libro->fresh()->stock);
         $this->assertSame(8, $libro->fresh()->stock_subinventario);
@@ -55,10 +53,9 @@ class InventoryStockServiceTest extends TestCase
         DB::transaction(fn () => $this->service->reserveApartado($apartado));
 
         $venta = $this->sale('general');
-        $this->movement($venta, $libro, 7);
 
         $this->expectException(\DomainException::class);
-        DB::transaction(fn () => $this->service->deductSale($venta));
+        $this->movement($venta, $libro, 7);
     }
 
     public function test_subinventory_apartado_reserve_and_cancel_are_symmetric(): void
@@ -116,11 +113,13 @@ class InventoryStockServiceTest extends TestCase
         $venta = $this->sale('general');
         $this->movement($venta, $libro, 3);
 
+        $this->assertSame(4, $libro->fresh()->stock);
+
         $this->withSession($this->adminSession())->post(route('ventas.cancelar', $venta))->assertRedirect();
-        $this->assertSame(10, $libro->fresh()->stock);
+        $this->assertSame(7, $libro->fresh()->stock);
 
         $this->withSession($this->adminSession())->delete(route('ventas.destroy', $venta))->assertRedirect();
-        $this->assertSame(10, $libro->fresh()->stock);
+        $this->assertSame(7, $libro->fresh()->stock);
     }
 
     public function test_mobile_final_abono_liquidates_apartado_automatically(): void
@@ -133,6 +132,7 @@ class InventoryStockServiceTest extends TestCase
             'monto' => 50,
             'metodo_pago' => 'efectivo',
             'usuario' => 'test',
+            'cod_congregante' => 'TEST_TOKEN_123',
         ])->assertCreated();
 
         $this->assertSame('liquidado', $apartado->fresh()->estado);
@@ -248,6 +248,29 @@ class InventoryStockServiceTest extends TestCase
         ]);
     }
 
+    public function test_initial_stock_movement_created_on_book_creation(): void
+    {
+        $response = $this->withSession($this->adminSession())
+            ->post(route('inventario.store'), [
+                'nombre' => 'Nuevo libro de prueba',
+                'precio' => 120,
+                'stock' => 15,
+            ]);
+
+        $response->assertRedirect(route('inventario.index'));
+
+        $libro = Libro::where('nombre', 'Nuevo libro de prueba')->firstOrFail();
+        $this->assertSame(15, $libro->stock);
+
+        $this->assertDatabaseHas('movimientos', [
+            'libro_id' => $libro->id,
+            'tipo_movimiento' => 'entrada',
+            'tipo_entrada' => 'compra',
+            'cantidad' => 15,
+            'observaciones' => 'Inventario inicial (Creación del libro)',
+        ]);
+    }
+
     public function test_block_book_deletion_if_relations_exist(): void
     {
         $libro = $this->book(stock: 10);
@@ -267,7 +290,7 @@ class InventoryStockServiceTest extends TestCase
 
         $response2->assertRedirect(route('inventario.index'));
         $response2->assertSessionHas('success');
-        $this->assertDatabaseMissing('libros', ['id' => $libro->id]);
+        $this->assertSoftDeleted('libros', ['id' => $libro->id]);
     }
 
     public function test_cannot_delete_payment_if_sale_cancelled(): void
@@ -399,7 +422,6 @@ class InventoryStockServiceTest extends TestCase
         // Venta general original de 5 unidades (descuenta 5, queda stock = 5, con 4 reservados)
         $venta = $this->sale('general');
         $this->movement($venta, $libro, 5);
-        $libro->decrement('stock', 5);
         
         $this->assertSame(5, $libro->fresh()->stock);
         
@@ -435,13 +457,12 @@ class InventoryStockServiceTest extends TestCase
         // Venta general original de 5 unidades (descuenta 5, queda stock = 5)
         $venta = $this->sale('general');
         $this->movement($venta, $libro, 5);
-        $libro->decrement('stock', 5);
         
         $this->assertSame(5, $libro->fresh()->stock);
         
         // Actualizar la venta a 6 unidades
-        // Al restaurar, stock es 1 + 5 = 6 (disponible para venta = 6, pero 4 están reservados, quedan 2 libres)
-        // Pedir 6 unidades (requiere 1 adicional del stock libre de 2) debería funcionar
+        // Al restaurar, stock es 5 + 5 = 10 (disponible para venta = 10, pero 4 están reservados, quedan 6 libres)
+        // Pedir 6 unidades (requiere 1 adicional del stock libre de 6) debería funcionar
         $response = $this->withSession($this->adminSession())
             ->put(route('ventas.update', $venta), [
                 'fecha_venta' => now()->toDateString(),
@@ -543,6 +564,50 @@ class InventoryStockServiceTest extends TestCase
         $venta = Venta::findOrFail($ventaId);
         $this->assertEquals($venta->total, $venta->total_pagado);
         $this->assertGreaterThan(0, $venta->total_pagado);
+
+        // Verificar descuento de stock correcto (5 - 2 = 3)
+        $this->assertSame(3, $libro->fresh()->stock_subinventario);
+    }
+
+    public function test_api_store_allows_vendor_to_sell_any_active_subinventory(): void
+    {
+        $libro = $this->book(stock: 10, subStock: 5);
+        $sub = $this->subinventory();
+        $sub->libros()->attach($libro->id, ['cantidad' => 5]);
+
+        $response = $this->postJson('/api/v1/ventas', [
+            'subinventario_id' => $sub->id,
+            'cod_congregante' => 'test-user',
+            'fecha_venta' => now()->toDateString(),
+            'tipo_pago' => 'contado',
+            'usuario' => 'test-user',
+            'libros' => [
+                ['libro_id' => $libro->id, 'cantidad' => 1]
+            ]
+        ]);
+
+        $response->assertStatus(201);
+        $response->assertJsonPath('success', true);
+        $this->assertSame(4, $libro->fresh()->stock_subinventario);
+    }
+
+    public function test_api_login_returns_cod_congregante_for_mobile_role(): void
+    {
+        \Illuminate\Support\Facades\Http::fake([
+            'https://www.sistemasdevida.com/pan/rest2/index.php/app/login' => \Illuminate\Support\Facades\Http::response([
+                'token' => 'mobile-token',
+                'roles' => [['ROL' => 'VENDEDOR', 'ID' => 18]],
+            ]),
+        ]);
+
+        $response = $this->postJson('/api/v1/login', [
+            'user' => 'vendedor',
+            'contra' => 'secreto',
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('success', true);
+        $response->assertJsonPath('data.cod_congregante', 'mobile-token');
     }
 
     public function test_api_store_admin_mixed_payment_updates_total_pagado(): void
@@ -554,6 +619,7 @@ class InventoryStockServiceTest extends TestCase
             'fecha_venta' => now()->toDateString(),
             'tipo_pago' => 'mixto',
             'usuario' => 'admin-user',
+            'cod_congregante' => 'TEST_TOKEN_123',
             'libros' => [
                 ['libro_id' => $libro->id, 'cantidad' => 1]
             ]
@@ -568,6 +634,9 @@ class InventoryStockServiceTest extends TestCase
         $venta = Venta::findOrFail($ventaId);
         $this->assertEquals($venta->total, $venta->total_pagado);
         $this->assertGreaterThan(0, $venta->total_pagado);
+
+        // Verificar descuento de stock correcto (10 - 1 = 9)
+        $this->assertSame(9, $libro->fresh()->stock);
     }
 
     public function test_api_mis_libros_disponibles_filters_by_congregante(): void
@@ -593,10 +662,10 @@ class InventoryStockServiceTest extends TestCase
         $response->assertStatus(200);
         $response->assertJsonPath('success', true);
         
-        // Debería ver solo libro1 y no libro2
+        // Los vendedores pueden vender libros de cualquier subinventario activo.
         $librosResponse = collect($response->json('data.libros'));
         $this->assertTrue($librosResponse->contains('id', $libro1->id));
-        $this->assertFalse($librosResponse->contains('id', $libro2->id));
+        $this->assertTrue($librosResponse->contains('id', $libro2->id));
     }
 
     public function test_api_listar_libros_filters_availability_by_congregante(): void
@@ -611,8 +680,8 @@ class InventoryStockServiceTest extends TestCase
         $response->assertStatus(200);
         
         $libroResponse = collect($response->json('data'))->firstWhere('id', $libro->id);
-        $this->assertFalse($libroResponse['puede_vender']);
-        $this->assertSame(0, $libroResponse['cantidad_disponible_para_mi']);
+        $this->assertTrue($libroResponse['puede_vender']);
+        $this->assertSame(5, $libroResponse['cantidad_disponible_para_mi']);
 
         // Asignar test-user a sub1
         DB::table('subinventario_user')->insert([
@@ -645,10 +714,10 @@ class InventoryStockServiceTest extends TestCase
         $response = $this->getJson('/api/v1/mis-subinventarios/test-user');
         $response->assertStatus(200);
         
-        // Debería listar solo sub1 y no sub2
+        // Los vendedores pueden ver todos los subinventarios activos.
         $subinventarios = collect($response->json('data'));
         $this->assertTrue($subinventarios->contains('id', $sub1->id));
-        $this->assertFalse($subinventarios->contains('id', $sub2->id));
+        $this->assertTrue($subinventarios->contains('id', $sub2->id));
     }
 
     public function test_api_mis_libros_disponibles_sanitizes_sort_direction(): void
@@ -713,5 +782,297 @@ class InventoryStockServiceTest extends TestCase
         // Confirmar que el cliente sigue existiendo
         $this->assertDatabaseHas('clientes', ['id' => $cliente->id]);
     }
-}
 
+    public function test_auditable_logs_model_changes_in_activity_logs(): void
+    {
+        // 1. Log de creación
+        $libro = Libro::create([
+            'nombre' => 'Libro Auditado',
+            'precio' => 150,
+            'stock' => 0,
+        ]);
+
+        $this->assertDatabaseHas('activity_logs', [
+            'action' => 'created',
+            'auditable_type' => Libro::class,
+            'auditable_id' => $libro->id,
+        ]);
+
+        // 2. Log de actualización
+        $libro->update(['precio' => 180]);
+
+        $log = \App\Models\ActivityLog::where('action', 'updated')
+            ->where('auditable_type', Libro::class)
+            ->where('auditable_id', $libro->id)
+            ->firstOrFail();
+
+        $this->assertEquals(150, $log->old_values['precio']);
+        $this->assertEquals(180, $log->new_values['precio']);
+
+        // 3. Log de borrado
+        $libro->delete();
+
+        $this->assertDatabaseHas('activity_logs', [
+            'action' => 'deleted',
+            'auditable_type' => Libro::class,
+            'auditable_id' => $libro->id,
+        ]);
+    }
+
+    public function test_soft_delete_venta_cascades_and_reactivates_layaway(): void
+    {
+        $libro = $this->book(stock: 10);
+        
+        // 1. Crear apartado y detalles
+        $apartado = $this->apartado('general');
+        $this->detail($apartado, $libro, 3);
+        
+        // Reservar stock del apartado (stock_apartado = 3, stock = 10)
+        DB::transaction(fn () => $this->service->reserveApartado($apartado));
+        $apartado->update(['saldo_pendiente' => 0, 'monto_total' => 300]);
+        $this->assertSame(3, $libro->fresh()->stock_apartado);
+        $this->assertSame(10, $libro->fresh()->stock);
+
+        // 2. Liquidar apartado (crea venta y consume stock_apartado)
+        $this->withSession($this->adminSession())
+            ->put(route('apartados.liquidar', $apartado))
+            ->assertRedirect();
+            
+        $apartado = $apartado->fresh();
+        $this->assertSame('liquidado', $apartado->estado);
+        $venta = $apartado->venta;
+        $this->assertNotNull($venta);
+        
+        // Stock debe ser consumido: stock = 7, stock_apartado = 0
+        $this->assertSame(7, $libro->fresh()->stock);
+        $this->assertSame(0, $libro->fresh()->stock_apartado);
+        
+        // Crear un pago asociado a la venta
+        $pago = \App\Models\Pago::create([
+            'venta_id' => $venta->id,
+            'monto' => 300,
+            'fecha_pago' => now(),
+            'metodo_pago' => 'efectivo',
+        ]);
+        
+        // 3. Borrar la venta usando Eloquent delete()
+        $venta->delete();
+        
+        // Verificar que la venta esté soft-deleted
+        $this->assertSoftDeleted('ventas', ['id' => $venta->id]);
+        
+        // Verificar que los movimientos de la venta estén soft-deleted
+        foreach ($venta->movimientos()->withTrashed()->get() as $movimiento) {
+            $this->assertSoftDeleted('movimientos', ['id' => $movimiento->id]);
+        }
+        
+        // Verificar que los pagos estén soft-deleted
+        $this->assertSoftDeleted('pagos', ['id' => $pago->id]);
+        
+        // Verificar que el apartado se reactivó (estado = activo, venta_id = null)
+        $apartado = $apartado->fresh();
+        $this->assertSame('activo', $apartado->estado);
+        $this->assertNull($apartado->venta_id);
+        
+        // Verificar que el stock de reserva se haya re-establecido (stock = 10, stock_apartado = 3)
+        $this->assertSame(10, $libro->fresh()->stock);
+        $this->assertSame(3, $libro->fresh()->stock_apartado);
+    }
+
+    public function test_api_secure_middleware_blocks_unauthenticated_requests(): void
+    {
+        // 1. Sin cod_congregante token (retorna 401 directamente sin HTTP call)
+        $response1 = $this->postJson('/api/v1/ventas', []);
+        $response1->assertStatus(401);
+        $response1->assertJsonPath('success', false);
+        $response1->assertJsonPath('message', 'Token de usuario (cod_congregante) requerido');
+
+        // Configurar todos los fakes de la API externa en una sola llamada para evitar colisiones
+        \Illuminate\Support\Facades\Http::fake([
+            'https://www.sistemasdevida.com/pan/rest2/index.php/app/roles/invalid-token' => \Illuminate\Support\Facades\Http::response(['error' => true], 401),
+            'https://www.sistemasdevida.com/pan/rest2/index.php/app/roles/valid-token-no-admin' => \Illuminate\Support\Facades\Http::response([
+                'roles' => [['ROL' => 'MIEMBRO', 'ID' => 1]]
+            ]),
+            'https://www.sistemasdevida.com/pan/rest2/index.php/app/roles/valid-token-admin' => \Illuminate\Support\Facades\Http::response([
+                'roles' => [['ROL' => 'ADMIN LIBRERIA', 'ID' => 19]]
+            ]),
+        ]);
+
+        // 2. Con token inválido o expirado (simulando error de la API externa)
+        $response2 = $this->getJson('/api/v1/mis-libros-disponibles/invalid-token');
+        $response2->assertStatus(401);
+        $response2->assertJsonPath('success', false);
+        $response2->assertJsonPath('message', 'Token de usuario inválido o expirado');
+
+        // 3. Con token que simula no tener roles autorizados (spoofing prevention)
+        // Intentar registrar venta admin con token válido pero sin rol admin
+        $response3 = $this->postJson('/api/v1/movil/admin/ventas', [
+            'tipo_inventario' => 'general',
+            'fecha_venta' => now()->toDateString(),
+            'tipo_pago' => 'mixto',
+            'usuario' => 'admin-user',
+            'cod_congregante' => 'valid-token-no-admin',
+            'libros' => [
+                ['libro_id' => 1, 'cantidad' => 1]
+            ]
+        ], [
+            // Intentamos engañar pasando X-Roles en la cabecera
+            'X-Roles' => json_encode([['ROL' => 'ADMIN LIBRERIA', 'ID' => 19]])
+        ]);
+
+        // Debe retornar 403
+        $response3->assertStatus(403);
+        $response3->assertJsonPath('success', false);
+        $response3->assertJsonPath('message', 'No tienes autorización para acceder a los recursos de la API móvil.');
+
+        // 4. Con token y roles correctos validados por la API externa (éxito)
+        $libro = $this->book(stock: 10);
+        $response4 = $this->postJson('/api/v1/movil/admin/ventas', [
+            'tipo_inventario' => 'general',
+            'fecha_venta' => now()->toDateString(),
+            'tipo_pago' => 'mixto',
+            'usuario' => 'admin-user',
+            'cod_congregante' => 'valid-token-admin',
+            'libros' => [
+                ['libro_id' => $libro->id, 'cantidad' => 1]
+            ]
+        ], [
+            // No pasamos X-Roles en la cabecera, la seguridad se basa 100% en la API
+        ]);
+
+        $response4->assertStatus(201);
+        $response4->assertJsonPath('success', true);
+    }
+
+    public function test_general_inventory_sales_logical_grouping_bug(): void
+    {
+        // Crear dos ventas del inventario general (tipo_inventario != 'subinventario', subinventario_id = null)
+        // pero con diferentes fechas
+        $ventaFueraRango = Venta::create([
+            'fecha_venta' => '2026-06-01', 'tipo_pago' => 'contado', 'estado' => 'completada', 'usuario' => 'test',
+            'tipo_inventario' => 'general', 'subinventario_id' => null, 'es_a_plazos' => false,
+            'total' => 100,
+        ]);
+        
+        $ventaDentroRango = Venta::create([
+            'fecha_venta' => '2026-06-15', 'tipo_pago' => 'contado', 'estado' => 'completada', 'usuario' => 'test',
+            'tipo_inventario' => 'general', 'subinventario_id' => null, 'es_a_plazos' => false,
+            'total' => 200,
+        ]);
+
+        // Simular petición GET /ventas con filtros de fecha y subinventario_id = general
+        $response = $this->withSession([
+            'codCongregante' => 'admin-test',
+            'username' => 'Admin',
+            'roles' => [['ROL' => 'ADMIN LIBRERIA', 'ID' => 19]],
+        ])->get(route('ventas.index', [
+            'subinventario_id' => 'general',
+            'fecha_desde' => '2026-06-10',
+            'fecha_hasta' => '2026-06-20',
+        ]));
+
+        $response->assertStatus(200);
+        
+        // El listado de ventas en la vista debe incluir solo la de dentro del rango de fecha.
+        $ventasEnVista = $response->viewData('ventas');
+        $this->assertCount(1, $ventasEnVista);
+        $this->assertEquals($ventaDentroRango->id, $ventasEnVista->first()->id);
+    }
+
+    public function test_vendedor_cannot_create_general_inventory_apartado(): void
+    {
+        $libro = $this->book(stock: 10);
+        $cliente = Cliente::create(['nombre' => 'Test Cliente']);
+
+        // Request simulating VENDEDOR role (non-admin)
+        $response = $this->postJson('/api/v1/apartados', [
+            'tipo_inventario' => 'general',
+            'cod_congregante' => 'valid-token-no-admin', // Mocked as non-admin
+            'cliente_id' => $cliente->id,
+            'fecha_apartado' => now()->toDateString(),
+            'enganche' => 0,
+            'usuario' => 'vendedor-user',
+            'libros' => [
+                ['libro_id' => $libro->id, 'cantidad' => 1, 'precio_unitario' => 100]
+            ]
+        ], [
+            'X-Roles' => json_encode([['ROL' => 'VENDEDOR', 'ID' => 18]])
+        ]);
+
+        $response->assertStatus(403);
+    }
+
+    public function test_server_forces_database_price_for_non_admins(): void
+    {
+        $libro = Libro::create(['nombre' => 'Libro Precio', 'precio' => 500, 'stock' => 10, 'stock_subinventario' => 5]);
+        $sub = $this->subinventory();
+        $sub->libros()->attach($libro->id, ['cantidad' => 5]);
+        $cliente = Cliente::create(['nombre' => 'Test Cliente']);
+
+        // Request simulating VENDEDOR role, trying to purchase at 50 pesos
+        $response = $this->postJson('/api/v1/apartados', [
+            'tipo_inventario' => 'subinventario',
+            'subinventario_id' => $sub->id,
+            'cod_congregante' => 'vendedor-token',
+            'cliente_id' => $cliente->id,
+            'fecha_apartado' => now()->toDateString(),
+            'enganche' => 0,
+            'usuario' => 'vendedor-user',
+            'libros' => [
+                ['libro_id' => $libro->id, 'cantidad' => 2, 'precio_unitario' => 50] // Client tries to manipulate the price
+            ]
+        ], [
+            'X-Roles' => json_encode([['ROL' => 'VENDEDOR', 'ID' => 18]])
+        ]);
+
+        $response->assertStatus(201);
+        $apartadoId = $response->json('data.apartado_id');
+        $apartado = Apartado::findOrFail($apartadoId);
+        
+        // Assert server overrode the client price and used the 500 database price
+        $this->assertEquals(1000, $apartado->monto_total); // 2 * 500 = 1000
+        $this->assertEquals(500, $apartado->detalles->first()->precio_unitario);
+    }
+
+    public function test_block_subinventory_update_when_active_apartado_exists(): void
+    {
+        $libro = $this->book(stock: 10, subStock: 5);
+        $sub = $this->subinventory();
+        $sub->libros()->attach($libro->id, ['cantidad' => 5]);
+        
+        $apartado = $this->apartado('subinventario', $sub->id);
+        $this->detail($apartado, $libro, 2);
+
+        $response = $this->withSession([
+            'codCongregante' => 'admin-test',
+            'username' => 'Admin',
+            'roles' => [['ROL' => 'ADMIN LIBRERIA', 'ID' => 19]],
+        ])->put(route('subinventarios.update', $sub), [
+            'fecha_subinventario' => now()->toDateString(),
+            'descripcion' => 'Updated Desc',
+            'libros' => [
+                ['libro_id' => $libro->id, 'cantidad' => 4]
+            ]
+        ]);
+
+        $response->assertSessionHasErrors('error');
+    }
+
+    public function test_block_subinventory_destroy_when_active_apartado_exists(): void
+    {
+        $libro = $this->book(stock: 10, subStock: 5);
+        $sub = $this->subinventory();
+        $sub->libros()->attach($libro->id, ['cantidad' => 5]);
+        
+        $apartado = $this->apartado('subinventario', $sub->id);
+        $this->detail($apartado, $libro, 2);
+
+        $response = $this->withSession([
+            'codCongregante' => 'admin-test',
+            'username' => 'Admin',
+            'roles' => [['ROL' => 'ADMIN LIBRERIA', 'ID' => 19]],
+        ])->delete(route('subinventarios.destroy', $sub));
+
+        $response->assertSessionHas('error');
+    }
+}

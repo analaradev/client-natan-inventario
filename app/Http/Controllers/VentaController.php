@@ -13,8 +13,12 @@ use App\Services\InventoryStockService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
+use App\Traits\HasRoleChecks;
+
 class VentaController extends Controller
 {
+    use HasRoleChecks;
+
     protected $codeGenerator;
     protected $excelReportService;
     protected $pdfReportService;
@@ -117,7 +121,10 @@ class VentaController extends Controller
         if ($request->filled('subinventario_id')) {
             if ($request->subinventario_id === 'general') {
                 // Filtrar solo ventas del inventario general
-                $query->where('tipo_inventario', '!=', 'subinventario')->orWhereNull('subinventario_id');
+                $query->where(function ($q) {
+                    $q->where('tipo_inventario', '!=', 'subinventario')
+                      ->orWhereNull('subinventario_id');
+                });
             } else {
                 // Filtrar por sub-inventario específico
                 $query->where('subinventario_id', $request->subinventario_id);
@@ -154,7 +161,7 @@ class VentaController extends Controller
                 break;
         }
 
-        $ventas = $query->paginate(15)->withQueryString();
+        $ventas = $query->paginate(10)->withQueryString();
 
         // Calcular estadísticas para la vista
         $estadisticas = $this->calcularEstadisticas($query);
@@ -179,31 +186,34 @@ class VentaController extends Controller
         // Clonar query para no afectar la paginación
         $queryStats = clone $query;
         
-        $ventas = $queryStats->get();
-        $ventasActivas = $ventas->where('estado', '!=', 'cancelada');
-        
+        // Limpiar bindings y cláusulas de select y orderBy para optimizar
+        $queryStats->getQuery()->orders = null;
+        $queryStats->getQuery()->columns = null;
+
+        // Ejecutar las agregaciones directamente en la base de datos
+        $stats = $queryStats->selectRaw("
+            COUNT(CASE WHEN estado != 'cancelada' THEN 1 END) as total_ventas,
+            SUM(CASE WHEN estado != 'cancelada' THEN total ELSE 0 END) as total_monto,
+            SUM(CASE WHEN estado != 'cancelada' THEN total_pagado ELSE 0 END) as total_pagado,
+            SUM(CASE WHEN estado != 'cancelada' THEN (total - total_pagado) ELSE 0 END) as total_pendiente,
+            COUNT(CASE WHEN estado = 'completada' THEN 1 END) as ventas_completadas,
+            COUNT(CASE WHEN estado = 'cancelada' THEN 1 END) as ventas_canceladas,
+            COUNT(CASE WHEN estado != 'cancelada' AND es_a_plazos = 1 THEN 1 END) as ventas_a_plazos,
+            COUNT(CASE WHEN estado != 'cancelada' AND es_a_plazos = 1 AND estado_pago != 'completado' AND fecha_limite IS NOT NULL AND fecha_limite < ? THEN 1 END) as ventas_vencidas
+        ", [now()->toDateString()])->first();
+
         return [
-            'total_ventas' => $ventasActivas->count(),
-            'total_monto' => $ventasActivas->sum('total'),
-            'total_pagado' => $ventasActivas->sum('total_pagado'),
-            'total_pendiente' => $ventasActivas->sum(function($v) { 
-                return $v->total - $v->total_pagado; 
-            }),
-            'ventas_completadas' => $ventas->where('estado', 'completada')->count(),
-            'ventas_canceladas' => $ventas->where('estado', 'cancelada')->count(),
-            'ventas_a_plazos' => $ventasActivas->where('es_a_plazos', true)->count(),
-            'ventas_vencidas' => $ventasActivas->filter(function($v) {
-                return $v->es_a_plazos && 
-                       $v->estado_pago !== 'completado' && 
-                       $v->fecha_limite && 
-                       $v->fecha_limite->isPast();
-            })->count(),
+            'total_ventas' => (int) ($stats->total_ventas ?? 0),
+            'total_monto' => (float) ($stats->total_monto ?? 0),
+            'total_pagado' => (float) ($stats->total_pagado ?? 0),
+            'total_pendiente' => (float) ($stats->total_pendiente ?? 0),
+            'ventas_completadas' => (int) ($stats->ventas_completadas ?? 0),
+            'ventas_canceladas' => (int) ($stats->ventas_canceladas ?? 0),
+            'ventas_a_plazos' => (int) ($stats->ventas_a_plazos ?? 0),
+            'ventas_vencidas' => (int) ($stats->ventas_vencidas ?? 0),
         ];
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
     public function create()
     {
         // Obtener libros con stock disponible en inventario general
@@ -286,10 +296,8 @@ class VentaController extends Controller
             
             // Validar stock según el tipo de inventario
             if ($tipoInventario === 'general') {
-                // Validación para inventario general
-                if (!$esAPLazos) {
-                    $this->lockAndValidateGeneralStock($validated['libros']);
-                }
+                // Validar siempre, incluso en ventas a plazos, para no sobrevender stock reservado
+                $this->lockAndValidateGeneralStock($validated['libros']);
             } else {
                 // Validación para subinventario
                 $this->lockAndValidateSubinventarioStock($subinventarioId, $validated['libros']);
@@ -342,9 +350,7 @@ class VentaController extends Controller
 
             }
 
-            if (!$esAPLazos) {
-                $this->stockService->deductSale($venta);
-            }
+
 
             // Calcular y actualizar totales de la venta
             $venta->actualizarTotales();
@@ -381,7 +387,7 @@ class VentaController extends Controller
      */
     public function show(Venta $venta)
     {
-        $venta->load(['movimientos.libro', 'cliente', 'apartado', 'subinventario']);
+        $venta->load(['movimientos.libro', 'cliente', 'apartado', 'subinventario', 'pagos']);
         
         return view('ventas.show', compact('venta'));
     }
@@ -492,14 +498,8 @@ class VentaController extends Controller
                 Libro::whereIn('id', $allBookIds)->lockForUpdate()->get();
             }
 
-            // Restaurar el stock de la venta actual (si fue descontado)
-            $restaurarStock = !$venta->es_a_plazos || $venta->estado_pago === 'completado';
-            if ($restaurarStock) {
-                $this->stockService->restoreSale($venta);
-            }
-
-            // Eliminar todos los movimientos actuales
-            $venta->movimientos()->delete();
+            // Eliminar todos los movimientos actuales (usando each->delete para que se disparen los eventos de Eloquent)
+            $venta->movimientos->each->delete();
 
             // Calcular totales
             $subtotal = 0;
@@ -539,11 +539,7 @@ class VentaController extends Controller
                 ]);
             }
 
-            // Descontar stock del nuevo estado (si aplica)
-            $descontarStock = !$esAPLazos || $venta->estado_pago === 'completado';
-            if ($descontarStock) {
-                $this->stockService->deductSale($venta);
-            }
+
 
             // Calcular total con descuento global y costo de envío
             $descuentoMonto = $subtotal * ($descuentoGlobal / 100);
@@ -635,11 +631,6 @@ class VentaController extends Controller
                 Libro::whereIn('id', $libroIds)->lockForUpdate()->get();
             }
 
-            $stockFueDescontado = !$venta->es_a_plazos || $venta->estado_pago === 'completado';
-            if ($stockFueDescontado) {
-                $this->stockService->restoreSale($venta);
-            }
-
             // Restaurar el stock y registrar movimientos de entrada
             foreach ($movimientos as $movimiento) {
                 $libro = $movimiento->libro;
@@ -654,19 +645,17 @@ class VentaController extends Controller
                     $observaciones .= ' - Devuelto a SubInv #' . $subinventarioId;
                 }
                 
-                if ($stockFueDescontado) {
-                    \App\Models\Movimiento::create([
-                        'libro_id' => $libro->id,
-                        'tipo_movimiento' => 'entrada',
-                        'tipo_entrada' => 'devolucion',
-                        'cantidad' => $movimiento->cantidad,
-                        'precio_unitario' => $movimiento->precio_unitario,
-                        'observaciones' => $observaciones,
-                        'fecha' => now(),
-                        'venta_id' => $venta->id,
-                        'usuario' => session('username', 'Sistema'),
-                    ]);
-                }
+                \App\Models\Movimiento::create([
+                    'libro_id' => $libro->id,
+                    'tipo_movimiento' => 'entrada',
+                    'tipo_entrada' => 'devolucion',
+                    'cantidad' => $movimiento->cantidad,
+                    'precio_unitario' => $movimiento->precio_unitario,
+                    'observaciones' => $observaciones,
+                    'fecha' => now(),
+                    'venta_id' => $venta->id,
+                    'usuario' => session('username', 'Sistema'),
+                ]);
             }
 
             // Si la venta se generó de un apartado, reactivarlo y volver a reservar su stock
@@ -700,7 +689,7 @@ class VentaController extends Controller
     {
         // Construir query con filtros
         $query = $this->buildFilteredQuery($request);
-        $ventas = $query->get();
+        $totalCount = (clone $query)->count();
         
         // Crear spreadsheet
         $spreadsheet = $this->excelReportService->createSpreadsheet();
@@ -718,17 +707,19 @@ class VentaController extends Controller
         $row = $this->excelReportService->setFilters($sheet1, $filtros, $row);
         
         // Estadísticas generales
-        if ($ventas->count() > 0) {
-            $ventasActivas = $ventas->where('estado', '!=', 'cancelada');
-            $totalMonto = $ventasActivas->sum('total');
-            $totalUnidades = $ventasActivas->sum(function($v) { return $v->movimientos->sum('cantidad'); });
-            $ventasConEnvio = $ventasActivas->where('tiene_envio', true)->count();
+        if ($totalCount > 0) {
+            $ventasActivasQuery = (clone $query)->where('estado', '!=', 'cancelada');
+            $ventasActivasCount = $ventasActivasQuery->count();
+            $totalMonto = $ventasActivasQuery->sum('total');
+            $totalUnidades = \App\Models\Movimiento::whereIn('venta_id', (clone $ventasActivasQuery)->select('id'))->sum('cantidad');
+            $ventasConEnvio = (clone $ventasActivasQuery)->where('tiene_envio', true)->count();
+            $canceladasCount = (clone $query)->where('estado', 'cancelada')->count();
             
             $sheet1->setCellValue('A' . $row, 'ESTADÍSTICAS GENERALES (EXCLUYENDO CANCELADAS):');
             $sheet1->getStyle('A' . $row)->getFont()->setBold(true);
             $row++;
             
-            $sheet1->setCellValue('A' . $row, 'Total de ventas activas: ' . $ventasActivas->count());
+            $sheet1->setCellValue('A' . $row, 'Total de ventas activas: ' . $ventasActivasCount);
             $row++;
             $sheet1->setCellValue('A' . $row, 'Monto total: $' . number_format($totalMonto, 2));
             $row++;
@@ -736,7 +727,7 @@ class VentaController extends Controller
             $row++;
             $sheet1->setCellValue('A' . $row, 'Ventas con envío: ' . $ventasConEnvio);
             $row++;
-            $sheet1->setCellValue('A' . $row, 'Ventas canceladas: ' . $ventas->where('estado', 'cancelada')->count());
+            $sheet1->setCellValue('A' . $row, 'Ventas canceladas: ' . $canceladasCount);
             $row += 2; // Espacio
         }
         
@@ -744,9 +735,12 @@ class VentaController extends Controller
         $headers = ['ID Venta', 'Fecha', 'Cliente', 'Origen', 'Apartado', '# Libros', 'Total Unidades', 'Tipo Pago', 'Descuento', 'Total Venta', 'Con Envío', 'Estado'];
         $row = $this->excelReportService->setTableHeaders($sheet1, $headers, $row);
         
+        // Eager load relationships for lazy loading
+        $lazyQuery = (clone $query)->with(['movimientos.libro', 'cliente', 'apartado', 'subinventario']);
+
         // Datos del resumen
         $dataSummary = [];
-        foreach ($ventas as $venta) {
+        foreach ($lazyQuery->lazy(250) as $venta) {
             // Determinar origen
             $origen = 'General';
             if ($venta->tipo_inventario === 'subinventario' && $venta->subinventario) {
@@ -792,7 +786,7 @@ class VentaController extends Controller
         
         // Datos del detalle
         $dataDetail = [];
-        foreach ($ventas as $venta) {
+        foreach ($lazyQuery->lazy(250) as $venta) {
             foreach ($venta->movimientos as $movimiento) {
                 $subtotal = ($movimiento->precio_unitario - ($movimiento->precio_unitario * $movimiento->descuento / 100)) * $movimiento->cantidad;
                 
@@ -827,29 +821,31 @@ class VentaController extends Controller
         try {
             // Construir query con filtros
             $query = $this->buildFilteredQuery($request);
-            $ventas = $query->get();
+            $totalCount = (clone $query)->count();
             
             // Validar que no haya demasiadas ventas (DOMPDF tiene limitaciones de memoria)
-            if ($ventas->count() > 50) {
+            if ($totalCount > 50) {
                 return response()->json([
                     'error' => true,
-                    'message' => 'El reporte PDF solo soporta hasta 50 ventas. Tienes ' . $ventas->count() . ' ventas en los resultados. Por favor, usa el formato Excel para reportes más grandes, o aplica filtros adicionales para reducir los resultados.'
+                    'message' => 'El reporte PDF solo soporta hasta 50 ventas. Tienes ' . $totalCount . ' ventas en los resultados. Por favor, usa el formato Excel para reportes más grandes, o aplica filtros adicionales para reducir los resultados.'
                 ], 422);
             }
+            
+            $ventas = $query->with(['movimientos.libro', 'cliente', 'apartado', 'subinventario'])->get();
             
             // Preparar filtros
             $filtros = $this->buildFiltersList($request);
             
             // Calcular estadísticas (excluyendo canceladas)
-            $ventasActivas = $ventas->where('estado', '!=', 'cancelada');
+            $ventasActivasQuery = (clone $query)->where('estado', '!=', 'cancelada');
             
             $estadisticas = [
-                'total' => $ventasActivas->count(),
-                'monto_total' => $ventasActivas->sum('total'),
-                'unidades_vendidas' => $ventasActivas->sum(function($v) { return $v->movimientos->sum('cantidad'); }),
-                'ventas_con_envio' => $ventasActivas->where('tiene_envio', true)->count(),
-                'completadas' => $ventas->where('estado', 'completada')->count(),
-                'canceladas' => $ventas->where('estado', 'cancelada')->count(),
+                'total' => $ventasActivasQuery->count(),
+                'monto_total' => $ventasActivasQuery->sum('total'),
+                'unidades_vendidas' => \App\Models\Movimiento::whereIn('venta_id', (clone $ventasActivasQuery)->select('id'))->sum('cantidad'),
+                'ventas_con_envio' => (clone $ventasActivasQuery)->where('tiene_envio', true)->count(),
+                'completadas' => (clone $query)->where('estado', 'completada')->count(),
+                'canceladas' => (clone $query)->where('estado', 'cancelada')->count(),
             ];
             
             // Obtener estilos base
@@ -941,7 +937,10 @@ class VentaController extends Controller
         if ($request->filled('subinventario_id')) {
             if ($request->subinventario_id === 'general') {
                 // Filtrar solo ventas del inventario general
-                $query->where('tipo_inventario', '!=', 'subinventario')->orWhereNull('subinventario_id');
+                $query->where(function ($q) {
+                    $q->where('tipo_inventario', '!=', 'subinventario')
+                      ->orWhereNull('subinventario_id');
+                });
             } else {
                 // Filtrar por sub-inventario específico
                 $query->where('subinventario_id', $request->subinventario_id);
@@ -1026,6 +1025,13 @@ class VentaController extends Controller
      */
     public function apiStore(Request $request)
     {
+        if (!$this->hasValidMobileRole($request)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No tienes autorización para realizar ventas.'
+            ], 403);
+        }
+
         $validated = $request->validate([
             // Datos básicos
             'subinventario_id' => 'required|exists:subinventarios,id',
@@ -1057,13 +1063,7 @@ class VentaController extends Controller
         ]);
         DB::beginTransaction();
         try {
-            $tieneAsignacion = DB::table('subinventario_user')
-                ->where('subinventario_id', $validated['subinventario_id'])
-                ->where('cod_congregante', $validated['cod_congregante'])
-                ->exists();
-            if (!$tieneAsignacion) {
-                throw new \DomainException('El usuario no está asignado a este punto de venta');
-            }
+            $codCongreganteValidado = $request->attributes->get('validated_cod_congregante', $validated['cod_congregante']);
 
             // 1. Bloquear y validar stock del subinventario antes de crear la venta.
             $stockLocks = $this->lockAndValidateSubinventarioStock(
@@ -1119,10 +1119,6 @@ class VentaController extends Controller
 
             }
 
-            if ($validated['tipo_pago'] !== 'credito') {
-                $this->stockService->deductSale($venta);
-            }
-
             // 8. CALCULAR TOTALES
             $venta->actualizarTotales();
             
@@ -1146,6 +1142,16 @@ class VentaController extends Controller
             }
 
             DB::commit();
+
+            \Log::info('Venta creada desde API móvil', [
+                'venta_id' => $venta->id,
+                'usuario' => $validated['usuario'],
+                'cod_congregante' => $codCongreganteValidado,
+                'subinventario_id' => $validated['subinventario_id'],
+                'total' => $venta->total,
+                'ip' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
 
             // 10. PREPARAR RESPUESTA
             return response()->json([
@@ -1172,10 +1178,17 @@ class VentaController extends Controller
             ], 422);
         } catch (\Exception $e) {
             DB::rollBack();
+            $requestData = $request->all();
+            if (isset($requestData['cod_congregante'])) {
+                $requestData['cod_congregante'] = '***';
+            }
+            if (isset($requestData['password'])) {
+                $requestData['password'] = '***';
+            }
             \Log::error('Error al crear venta desde API móvil', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
-                'request' => $request->all()
+                'request' => $requestData
             ]);
             
             return response()->json([
@@ -1187,19 +1200,19 @@ class VentaController extends Controller
 
     /**
      * API - Listar puntos de venta según rol
-     * Vendedor: todos los subinventarios activos (sin inventario general).
+     * Vendedor: subinventarios asignados (sin inventario general).
      * Admin Librería y Supervisor: inventario general y todos los subinventarios.
      */
     public function apiPuntosVenta(Request $request)
     {
-        $tieneAccesoTotal = $this->isAdmin() || $this->isAdminFromRequest($request);
+        if (!$this->hasValidMobileRole($request)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No tienes autorización para acceder a los puntos de venta.'
+            ], 403);
+        }
 
-        \Log::info('[apiPuntosVenta] Request recibida', [
-            'cod_congregante' => $request->query('cod_congregante'),
-            'es_admin' => $tieneAccesoTotal,
-            'x_roles_header' => $request->header('X-Roles'),
-            'ip' => $request->ip(),
-        ]);
+        $tieneAccesoTotal = $this->isAdminFromRequest($request);
 
         if ($tieneAccesoTotal) {
             $inventarioGeneral = [
@@ -1226,21 +1239,7 @@ class VentaController extends Controller
             ], 200);
         }
 
-        $codCongregante = $request->query('cod_congregante');
-
-        if (!$codCongregante) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Debe proporcionar el código del congregante.'
-            ], 422);
-        }
-
         $subinventarios = SubInventario::where('estado', 'activo')
-            ->whereIn('id', function($query) use ($codCongregante) {
-                $query->select('subinventario_id')
-                    ->from('subinventario_user')
-                    ->where('cod_congregante', $codCongregante);
-            })
             ->get(['id', 'descripcion', 'fecha_subinventario', 'estado', 'observaciones'])
             ->map(function ($subinventario) {
                 return $this->formatSubinventarioPuntoVenta($subinventario);
@@ -1404,10 +1403,6 @@ class VentaController extends Controller
 
             }
 
-            if ($validated['tipo_pago'] !== 'credito') {
-                $this->stockService->deductSale($venta);
-            }
-
             $venta->actualizarTotales();
 
             if ($validated['tipo_pago'] === 'contado' || $validated['tipo_pago'] === 'mixto') {
@@ -1426,6 +1421,17 @@ class VentaController extends Controller
             $venta->save();
 
             DB::commit();
+
+            \Log::info('Venta creada desde API móvil admin', [
+                'venta_id' => $venta->id,
+                'usuario' => $validated['usuario'],
+                'cod_congregante' => $request->attributes->get('validated_cod_congregante'),
+                'tipo_inventario' => $tipoInventario,
+                'subinventario_id' => $tipoInventario === 'subinventario' ? $validated['subinventario_id'] : null,
+                'total' => $venta->total,
+                'ip' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
 
             return response()->json([
                 'success' => true,
@@ -1451,10 +1457,17 @@ class VentaController extends Controller
             ], 422);
         } catch (\Exception $e) {
             DB::rollBack();
+            $requestData = $request->all();
+            if (isset($requestData['cod_congregante'])) {
+                $requestData['cod_congregante'] = '***';
+            }
+            if (isset($requestData['password'])) {
+                $requestData['password'] = '***';
+            }
             \Log::error('Error al crear venta desde API admin', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
-                'request' => $request->all()
+                'request' => $requestData
             ]);
 
             return response()->json([
@@ -1554,80 +1567,6 @@ class VentaController extends Controller
         ];
     }
 
-    /**
-     * Verifica si el usuario actual es administrador
-     */
-    private function isAdmin()
-    {
-        $roles = session('roles', []);
-        
-        if (empty($roles)) {
-            return false;
-        }
-        
-        foreach ($roles as $rol) {
-            $rolNombre = $this->normalizeRoleName($rol['ROL'] ?? $rol['rol'] ?? '');
-            $rolId = $rol['ID'] ?? $rol['id'] ?? $rol['ROL_ID'] ?? $rol['rol_id'] ?? null;
-
-            if ($this->hasFullInventoryRole($rolNombre, $rolId)) {
-                return true;
-            }
-        }
-        
-        return false;
-    }
-
-    /**
-     * Verifica rol admin desde la petición (para API sin sesión)
-     */
-    private function isAdminFromRequest(Request $request): bool
-    {
-        $roles = $request->input('roles', null);
-
-        if (is_string($roles)) {
-            $roles = json_decode($roles, true);
-        }
-
-        if (!is_array($roles)) {
-            $headerRoles = $request->header('X-Roles');
-            if (is_string($headerRoles)) {
-                $roles = json_decode($headerRoles, true);
-            }
-        }
-
-        if (!is_array($roles)) {
-            return false;
-        }
-
-        foreach ($roles as $rol) {
-            $rolNombre = '';
-            $rolId = null;
-
-            if (is_array($rol)) {
-                $rolNombre = $this->normalizeRoleName($rol['ROL'] ?? $rol['rol'] ?? '');
-                $rolId = $rol['ID'] ?? $rol['id'] ?? $rol['ROL_ID'] ?? $rol['rol_id'] ?? $rol['CODROL'] ?? $rol['codrol'] ?? null;
-            } else {
-                $rolNombre = $this->normalizeRoleName((string) $rol);
-            }
-
-            if ($this->hasFullInventoryRole($rolNombre, $rolId)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private function hasFullInventoryRole(string $roleName, $roleId): bool
-    {
-        return $roleName === 'ADMIN LIBRERIA' ||
-            $roleName === 'SUPERVISOR' ||
-            (string) $roleId === '19' ||
-            (string) $roleId === '20' ||
-            $roleName === '19' ||
-            $roleName === '20';
-    }
-
     private function formatSubinventarioPuntoVenta(SubInventario $subinventario): array
     {
         $stats = DB::table('subinventario_libro')
@@ -1647,21 +1586,4 @@ class VentaController extends Controller
         ];
     }
 
-    private function normalizeRoleName(string $roleName): string
-    {
-        $roleName = strtoupper(trim($roleName));
-
-        return strtr($roleName, [
-            'Á' => 'A',
-            'É' => 'E',
-            'Í' => 'I',
-            'Ó' => 'O',
-            'Ú' => 'U',
-            'á' => 'A',
-            'é' => 'E',
-            'í' => 'I',
-            'ó' => 'O',
-            'ú' => 'U',
-        ]);
-    }
 }

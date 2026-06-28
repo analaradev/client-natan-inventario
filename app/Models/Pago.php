@@ -4,9 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Traits\Auditable;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Pago extends Model
 {
+    use Auditable, SoftDeletes;
     protected $fillable = [
         'venta_id',
         'fecha_pago',
@@ -26,7 +29,7 @@ class Pago extends Model
      */
     public function venta(): BelongsTo
     {
-        return $this->belongsTo(Venta::class);
+        return $this->belongsTo(Venta::class)->withTrashed();
     }
 
     /**

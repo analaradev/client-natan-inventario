@@ -7,9 +7,14 @@ use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\InventarioController;
 use App\Http\Controllers\ApartadoController;
 use App\Http\Controllers\AbonoMovilController;
+use App\Http\Controllers\AuthController;
 
 // API Routes
-Route::prefix('v1')->group(function () {
+Route::prefix('v1')->middleware('throttle:20,1')->group(function () {
+    Route::post('/login', [AuthController::class, 'apiLogin']);
+});
+
+Route::prefix('v1')->middleware(['throttle:60,1', 'secure.api', 'mobile.role'])->group(function () {
     // SubInventarios
     Route::get('/subinventarios', [SubInventarioController::class, 'apiIndex']);
     Route::get('/mis-subinventarios/{cod_congregante}', [SubInventarioController::class, 'apiMisSubinventarios']);
@@ -65,16 +70,12 @@ if (app()->environment('local', 'testing')) {
     });
 }
 
-// API Routes sin versión (para uso interno)
-Route::get('/apartados/buscar', [ApartadoController::class, 'apiBuscar']);
-Route::get('/clientes/buscar', [ClienteController::class, 'apiBuscar']);
-
 // Operaciones destructivas disponibles únicamente en desarrollo local.
-if (app()->environment('local')) {
+if (app()->environment('local', 'testing')) {
 Route::get('/run-migrations/{secret_key}', function ($secret_key) {
     // Clave secreta para seguridad - cargada desde .env
-    $configuredKey = env('DB_MIGRATIONS_KEY', 'pan_de_vida_2026_migrations');
-    if ($secret_key !== $configuredKey) {
+    $configuredKey = env('DB_MIGRATIONS_KEY');
+    if (empty($configuredKey) || $secret_key !== $configuredKey) {
         return response()->json([
             'success' => false,
             'message' => 'Acceso no autorizado'
@@ -103,8 +104,8 @@ Route::get('/run-migrations/{secret_key}', function ($secret_key) {
 
 // Ruta para agregar columnas directamente (EMERGENCIA)
 Route::get('/fix-envios-table/{secret_key}', function ($secret_key) {
-    $configuredKey = env('DB_MIGRATIONS_KEY', 'pan_de_vida_2026_migrations');
-    if ($secret_key !== $configuredKey) {
+    $configuredKey = env('DB_MIGRATIONS_KEY');
+    if (empty($configuredKey) || $secret_key !== $configuredKey) {
         return response()->json([
             'success' => false,
             'message' => 'Acceso no autorizado'

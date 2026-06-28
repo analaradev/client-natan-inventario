@@ -63,6 +63,10 @@
                                     <i class="fas fa-info-circle mr-1"></i>
                                     Máximo: <span class="font-semibold text-orange-600">${{ number_format($apartado->saldo_pendiente, 2) }}</span>
                                 </p>
+                                <div id="saldoProyectado" class="mt-2 hidden rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+                                    <i class="fas fa-calculator mr-1"></i>
+                                    Saldo proyectado: <span class="font-bold" id="saldoProyectadoMonto">$0.00</span>
+                                </div>
                                 @error('monto')
                                     <p class="text-red-500 text-sm mt-1">
                                         <i class="fas fa-exclamation-circle mr-1"></i>{{ $message }}
@@ -273,4 +277,45 @@
     </x-card>
     @endif
 </x-page-layout>
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const montoInput = document.getElementById('monto');
+    const saldoProyectado = document.getElementById('saldoProyectado');
+    const saldoProyectadoMonto = document.getElementById('saldoProyectadoMonto');
+    const saldoActual = {{ (float) $apartado->saldo_pendiente }};
+
+    function formatCurrency(value) {
+        return '$' + value.toLocaleString('es-MX', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    }
+
+    function updateSaldoProyectado() {
+        const monto = parseFloat(montoInput.value);
+
+        if (!monto || monto <= 0) {
+            saldoProyectado.classList.add('hidden');
+            return;
+        }
+
+        const nuevoSaldo = Math.max(saldoActual - monto, 0);
+        saldoProyectadoMonto.textContent = formatCurrency(nuevoSaldo);
+        saldoProyectado.classList.remove('hidden');
+        saldoProyectado.classList.toggle('border-green-200', nuevoSaldo === 0);
+        saldoProyectado.classList.toggle('bg-green-50', nuevoSaldo === 0);
+        saldoProyectado.classList.toggle('text-green-800', nuevoSaldo === 0);
+        saldoProyectado.classList.toggle('border-blue-200', nuevoSaldo !== 0);
+        saldoProyectado.classList.toggle('bg-blue-50', nuevoSaldo !== 0);
+        saldoProyectado.classList.toggle('text-blue-800', nuevoSaldo !== 0);
+    }
+
+    if (montoInput) {
+        montoInput.addEventListener('input', updateSaldoProyectado);
+        updateSaldoProyectado();
+    }
+});
+</script>
+@endpush
 @endsection

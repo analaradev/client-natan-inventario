@@ -11,8 +11,8 @@
     $canModify = !$requireAdmin || $isAdminLibreria;
 @endphp
 
-<td class="px-6 py-4 whitespace-nowrap text-sm">
-    <div class="flex justify-end gap-1">
+<td class="px-6 py-4 text-sm">
+    <div class="flex flex-wrap justify-end gap-1">
         @if($viewRoute)
             <x-button 
                 href="{{ $viewRoute }}" 

@@ -5,8 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\Cliente;
 use Illuminate\Http\Request;
 
+use App\Traits\HasRoleChecks;
+
 class ClienteController extends Controller
 {
+    use HasRoleChecks;
     /**
      * Buscar clientes por nombre
      */
@@ -66,7 +69,7 @@ class ClienteController extends Controller
                 $query->latest();
         }
 
-        $clientes = $query->paginate(15);
+        $clientes = $query->paginate(10);
         
         $totalClientes = Cliente::count();
 
@@ -138,11 +141,13 @@ class ClienteController extends Controller
      */
     public function show(Cliente $cliente)
     {
-        $cliente->load(['ventas' => function($query) {
-            $query->latest();
-        }]);
+        $ventas = $cliente->ventas()->latest()->paginate(10, ['*'], 'ventas_page');
+        $apartados = $cliente->apartados()
+            ->withCount('detalles')
+            ->latest()
+            ->paginate(10, ['*'], 'apartados_page');
 
-        return view('clientes.show', compact('cliente'));
+        return view('clientes.show', compact('cliente', 'ventas', 'apartados'));
     }
 
     /**
@@ -201,6 +206,13 @@ class ClienteController extends Controller
      */
     public function apiIndex(Request $request)
     {
+        if (!$this->hasValidMobileRole($request)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No tienes autorización para acceder a los clientes.'
+            ], 403);
+        }
+
         try {
             $query = Cliente::query();
 
@@ -218,6 +230,15 @@ class ClienteController extends Controller
 
             // Determinar si usar paginación
             if ($request->filled('sin_paginacion') && $request->sin_paginacion == '1') {
+                // Si no es admin/supervisor y no hay término de búsqueda, no permitir descargar toda la base de datos sin paginar.
+                $esAdmin = $this->isAdminFromRequest($request);
+                if (!$esAdmin && !$request->filled('search')) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Búsqueda requerida para listar clientes sin paginación'
+                    ], 400);
+                }
+
                 $clientes = $query->get();
                 
                 return response()->json([
@@ -234,7 +255,10 @@ class ClienteController extends Controller
             }
 
             // Con paginación
-            $perPage = $request->get('per_page', 50);
+            $perPage = (int) $request->get('per_page', 50);
+            if ($perPage < 1 || $perPage > 250) {
+                $perPage = 50;
+            }
             $clientes = $query->paginate($perPage);
 
             return response()->json([
@@ -286,4 +310,3 @@ class ClienteController extends Controller
         return response()->json($clientes);
     }
 }
-

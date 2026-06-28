@@ -1,0 +1,245 @@
+{
+  "info": {
+    "name": "Pan Control Interno - API Movil",
+    "description": "Coleccion Postman para probar la API movil con autenticacion por token externo cod_congregante.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://inventario.sistemasdevida.com"
+    },
+    {
+      "key": "cod_congregante",
+      "value": "TOKEN_EXTERNO"
+    },
+    {
+      "key": "subinventario_id",
+      "value": "1"
+    },
+    {
+      "key": "libro_id",
+      "value": "1"
+    },
+    {
+      "key": "cliente_id",
+      "value": "1"
+    },
+    {
+      "key": "apartado_id",
+      "value": "1"
+    }
+  ],
+  "item": [
+    {
+      "name": "Login movil",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/login",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "login"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"user\": \"usuario\",\n  \"contra\": \"password\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Mis subinventarios",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/mis-subinventarios/{{cod_congregante}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "mis-subinventarios",
+            "{{cod_congregante}}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Libros de subinventario",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/subinventarios/{{subinventario_id}}/libros?cod_congregante={{cod_congregante}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "subinventarios",
+            "{{subinventario_id}}",
+            "libros"
+          ],
+          "query": [
+            {
+              "key": "cod_congregante",
+              "value": "{{cod_congregante}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Crear venta vendedor",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/ventas",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "ventas"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"subinventario_id\": {{subinventario_id}},\n  \"cod_congregante\": \"{{cod_congregante}}\",\n  \"fecha_venta\": \"2026-06-26\",\n  \"tipo_pago\": \"contado\",\n  \"usuario\": \"vendedor movil\",\n  \"libros\": [\n    {\n      \"libro_id\": {{libro_id}},\n      \"cantidad\": 1,\n      \"descuento\": 0\n    }\n  ]\n}"
+        }
+      }
+    },
+    {
+      "name": "Puntos de venta movil",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/movil/puntos-venta?cod_congregante={{cod_congregante}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "movil",
+            "puntos-venta"
+          ],
+          "query": [
+            {
+              "key": "cod_congregante",
+              "value": "{{cod_congregante}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Crear apartado",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/apartados",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "apartados"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"tipo_inventario\": \"subinventario\",\n  \"subinventario_id\": {{subinventario_id}},\n  \"cod_congregante\": \"{{cod_congregante}}\",\n  \"cliente_id\": {{cliente_id}},\n  \"fecha_apartado\": \"2026-06-26\",\n  \"enganche\": 0,\n  \"usuario\": \"vendedor movil\",\n  \"libros\": [\n    {\n      \"libro_id\": {{libro_id}},\n      \"cantidad\": 1,\n      \"precio_unitario\": 0,\n      \"descuento\": 0\n    }\n  ]\n}"
+        }
+      }
+    },
+    {
+      "name": "Historial de abonos",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/movil/apartados/{{apartado_id}}/abonos?cod_congregante={{cod_congregante}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "movil",
+            "apartados",
+            "{{apartado_id}}",
+            "abonos"
+          ],
+          "query": [
+            {
+              "key": "cod_congregante",
+              "value": "{{cod_congregante}}"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

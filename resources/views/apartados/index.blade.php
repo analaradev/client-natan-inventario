@@ -5,6 +5,7 @@
 @section('content')
 @php
     $isAdminLibreria = \App\Helpers\AuthHelper::isAdminLibreria();
+    $canManageSalesOperations = \App\Helpers\AuthHelper::canManageSalesOperations();
 @endphp
 
 <x-page-layout 
@@ -12,7 +13,7 @@
     description="Total: {{ $apartados->total() }} apartados"
 >
     <x-slot name="header">
-        @if($isAdminLibreria)
+        @if($canManageSalesOperations)
             <x-button 
                 variant="primary" 
                 icon="fas fa-plus"
@@ -85,24 +86,32 @@
     </div>
 
     <!-- Filtros -->
-    <x-card>
-        <form method="GET" action="{{ route('apartados.index') }}">
-            <div class="grid grid-cols-4 gap-4 mb-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
-                    <select name="cliente_id" class="form-select w-full">
-                        <option value="">Todos los clientes</option>
-                        @foreach($clientes as $cliente)
-                            <option value="{{ $cliente->id }}" {{ request('cliente_id') == $cliente->id ? 'selected' : '' }}>
-                                {{ $cliente->nombre }}
-                            </option>
-                        @endforeach
-                    </select>
+    <x-card class="overflow-visible">
+        <form method="GET" action="{{ route('apartados.index') }}" class="overflow-visible">
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[minmax(260px,1.5fr)_minmax(200px,1fr)_minmax(160px,0.75fr)_minmax(160px,0.75fr)] gap-4 mb-4">
+                <div class="min-w-0">
+                    @php
+                        $selectedClienteId = request('cliente_id');
+                        $selectedCliente = $selectedClienteId
+                            ? ($clientes->firstWhere('id', (int) $selectedClienteId) ?? \App\Models\Cliente::find($selectedClienteId))
+                            : null;
+                    @endphp
+                    <x-cliente-search-dynamic
+                        name="cliente_id"
+                        :selected="$selectedClienteId"
+                        :clienteData="$selectedCliente"
+                        label="Cliente"
+                        :required="false"
+                        placeholder="Buscar cliente..."
+                        :showCreateOption="false"
+                    />
                 </div>
 
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Estado</label>
-                    <select name="estado" class="form-select w-full">
+                <div class="min-w-0">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-list-check text-gray-400"></i> Estado
+                    </label>
+                    <select name="estado" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
                         <option value="">Todos los estados</option>
                         <option value="activo" {{ request('estado') == 'activo' ? 'selected' : '' }}>Activo</option>
                         <option value="liquidado" {{ request('estado') == 'liquidado' ? 'selected' : '' }}>Liquidado</option>
@@ -110,25 +119,32 @@
                     </select>
                 </div>
 
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Fecha Desde</label>
-                    <input type="date" name="fecha_desde" class="form-input w-full" value="{{ request('fecha_desde') }}">
+                <div class="min-w-0">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-calendar-alt text-gray-400"></i> Fecha Desde
+                    </label>
+                    <input type="date" name="fecha_desde" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500" value="{{ request('fecha_desde') }}">
                 </div>
 
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Fecha Hasta</label>
-                    <input type="date" name="fecha_hasta" class="form-input w-full" value="{{ request('fecha_hasta') }}">
+                <div class="min-w-0">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-calendar-check text-gray-400"></i> Fecha Hasta
+                    </label>
+                    <input type="date" name="fecha_hasta" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500" value="{{ request('fecha_hasta') }}">
                 </div>
             </div>
 
-            <div class="flex justify-between items-center">
+            <div class="flex flex-wrap justify-between items-center gap-3 pt-2">
                 <div class="flex gap-3">
                     <x-button type="submit" variant="primary" icon="fas fa-filter">
                         Aplicar Filtros
                     </x-button>
-                    <a href="{{ route('apartados.index') }}" class="text-gray-600 hover:text-gray-800">
-                        <i class="fas fa-times-circle mr-1"></i> Limpiar Filtros
-                    </a>
+                    @if(request()->hasAny(['cliente_id', 'estado', 'fecha_desde', 'fecha_hasta']))
+                        <x-button type="button" variant="secondary" icon="fas fa-times"
+                                  onclick="window.location='{{ route('apartados.index') }}'">
+                            Limpiar Filtros
+                        </x-button>
+                    @endif
                 </div>
 
                 <!-- Botones de exportación -->
@@ -210,17 +226,25 @@
                             </span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <div class="flex gap-2">
-                                <a href="{{ route('apartados.show', $apartado) }}" class="text-blue-600 hover:text-blue-900" title="Ver detalles">
-                                    <i class="fas fa-eye"></i>
-                                </a>
+                            <div class="flex justify-start gap-1">
+                                <x-button
+                                    href="{{ route('apartados.show', $apartado) }}"
+                                    variant="primary"
+                                    size="sm"
+                                    icon="fas fa-eye"
+                                    title="Ver detalles">
+                                </x-button>
                                 @if($apartado->estado === 'activo')
                                     @if($isAdminLibreria)
-                                        <a href="{{ route('apartados.abonos.create', $apartado) }}" class="text-green-600 hover:text-green-900" title="Registrar abono">
-                                            <i class="fas fa-dollar-sign"></i>
-                                        </a>
+                                        <x-button
+                                            href="{{ route('apartados.abonos.create', $apartado) }}"
+                                            variant="success"
+                                            size="sm"
+                                            icon="fas fa-dollar-sign"
+                                            title="Registrar abono">
+                                        </x-button>
                                     @else
-                                        <button disabled class="text-gray-400 cursor-not-allowed opacity-60" title="Solo Admin Librería">
+                                        <button disabled class="inline-flex items-center justify-center px-3 py-1.5 text-sm rounded-lg bg-gray-200 text-gray-400 cursor-not-allowed opacity-60" title="Solo Admin Librería">
                                             <i class="fas fa-dollar-sign"></i>
                                         </button>
                                     @endif
@@ -246,3 +270,7 @@
     </x-card>
 </x-page-layout>
 @endsection
+
+@push('scripts')
+<script src="{{ asset('js/cliente-search-dynamic.js') }}"></script>
+@endpush

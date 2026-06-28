@@ -5,9 +5,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Traits\Auditable;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Apartado extends Model
 {
+    use Auditable, SoftDeletes;
     protected $fillable = [
         'folio',
         'cliente_id',
@@ -37,7 +40,7 @@ class Apartado extends Model
      */
     public function cliente(): BelongsTo
     {
-        return $this->belongsTo(Cliente::class);
+        return $this->belongsTo(Cliente::class)->withTrashed();
     }
 
     /**
@@ -45,7 +48,7 @@ class Apartado extends Model
      */
     public function subinventario(): BelongsTo
     {
-        return $this->belongsTo(SubInventario::class);
+        return $this->belongsTo(SubInventario::class)->withTrashed();
     }
 
     /**

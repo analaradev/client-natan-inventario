@@ -82,10 +82,10 @@ class EnvioController extends Controller
                 break;
         }
 
-        $envios = $query->paginate(15)->withQueryString();
-
         // Calcular estadísticas para la vista
         $estadisticas = $this->calcularEstadisticas($query);
+
+        $envios = $query->paginate(10)->withQueryString();
 
         // Obtener ventas para el filtro (solo ventas completadas)
         $ventas = Venta::where('estado', 'completada')
@@ -104,16 +104,36 @@ class EnvioController extends Controller
         // Clonar query para no afectar la paginación
         $queryStats = clone $query;
         
-        $envios = $queryStats->get();
-        
+        // Limpiar bindings y cláusulas de select y orderBy para optimizar
+        $queryStats->getQuery()->orders = null;
+        $queryStats->getQuery()->columns = null;
+        $queryStats->getQuery()->limit = null;
+        $queryStats->getQuery()->offset = null;
+
+        $stats = $queryStats->selectRaw("
+            COUNT(id) as total_envios,
+            SUM(monto_a_pagar) as total_monto,
+            COUNT(CASE WHEN estado_pago = 'pagado' THEN 1 END) as envios_pagados,
+            COUNT(CASE WHEN estado_pago = 'pendiente' THEN 1 END) as envios_pendientes
+        ")->first();
+
+        // Contar el total de ventas asociadas mediante la tabla pivot sin instanciar modelos
+        $queryEnvios = clone $query;
+        $queryEnvios->getQuery()->orders = null;
+        $queryEnvios->getQuery()->columns = null;
+        $queryEnvios->getQuery()->limit = null;
+        $queryEnvios->getQuery()->offset = null;
+
+        $totalVentasAsociadas = DB::table('envio_venta')
+            ->whereIn('envio_id', $queryEnvios->select('id'))
+            ->count();
+
         return [
-            'total_envios' => $envios->count(),
-            'total_monto' => $envios->sum('monto_a_pagar'),
-            'total_ventas_asociadas' => $envios->sum(function($e) { 
-                return $e->ventas->count(); 
-            }),
-            'envios_pagados' => $envios->where('estado_pago', 'pagado')->count(),
-            'envios_pendientes' => $envios->where('estado_pago', 'pendiente')->count(),
+            'total_envios' => (int) ($stats->total_envios ?? 0),
+            'total_monto' => (float) ($stats->total_monto ?? 0),
+            'total_ventas_asociadas' => $totalVentasAsociadas,
+            'envios_pagados' => (int) ($stats->envios_pagados ?? 0),
+            'envios_pendientes' => (int) ($stats->envios_pendientes ?? 0),
         ];
     }
 
@@ -158,6 +178,21 @@ class EnvioController extends Controller
             'ventas.min' => 'Debes seleccionar al menos una venta',
             'comprobante.max' => 'El comprobante no puede pesar más de 5MB',
         ]);
+
+        // Validar que las ventas sean elegibles para envío
+        $invalidVentas = Venta::whereIn('id', $validated['ventas'])
+            ->where(function($q) {
+                $q->where('tiene_envio', false)
+                  ->orWhere('estado', 'cancelada')
+                  ->orWhereHas('envios');
+            })
+            ->pluck('id')
+            ->toArray();
+
+        if (!empty($invalidVentas)) {
+            return back()->withErrors(['ventas' => 'Las siguientes ventas son inválidas para envío o ya están asociadas a otro: ' . implode(', ', $invalidVentas)])
+                ->withInput();
+        }
 
         DB::beginTransaction();
         try {
@@ -254,6 +289,23 @@ class EnvioController extends Controller
             'ventas.*' => 'exists:ventas,id',
         ]);
 
+        // Validar que las ventas sean elegibles para envío
+        $invalidVentas = Venta::whereIn('id', $validated['ventas'])
+            ->where(function($q) use ($envio) {
+                $q->where('tiene_envio', false)
+                  ->orWhere('estado', 'cancelada')
+                  ->orWhereHas('envios', function($eq) use ($envio) {
+                      $eq->where('envio_id', '!=', $envio->id);
+                  });
+            })
+            ->pluck('id')
+            ->toArray();
+
+        if (!empty($invalidVentas)) {
+            return back()->withErrors(['ventas' => 'Las siguientes ventas son inválidas para envío o ya están asociadas a otro: ' . implode(', ', $invalidVentas)])
+                ->withInput();
+        }
+
         DB::beginTransaction();
         try {
             $oldComprobante = null;
@@ -345,7 +397,6 @@ class EnvioController extends Controller
     {
         // Construir query con filtros
         $query = $this->buildFilteredQuery($request);
-        $envios = $query->get();
         
         // Crear spreadsheet
         $spreadsheet = $this->excelReportService->createSpreadsheet();
@@ -359,11 +410,22 @@ class EnvioController extends Controller
         $filtros = $this->buildFiltersList($request);
         $row = $this->excelReportService->setFilters($sheet, $filtros, $row);
         
+        $enviosCount = (clone $query)->count();
+        
         // Estadísticas
-        if ($envios->count() > 0) {
-            $totalMonto = $envios->sum('monto_a_pagar');
-            $totalVentas = $envios->sum(function($e) { return $e->ventas->count(); });
-            $totalCostosEnvio = $envios->sum(function($e) { return $e->ventas->sum('costo_envio'); });
+        if ($enviosCount > 0) {
+            $totalMonto = (clone $query)->sum('monto_a_pagar');
+            
+            // Total de ventas asociadas
+            $totalVentas = DB::table('envio_venta')
+                ->whereIn('envio_id', (clone $query)->select('id'))
+                ->count();
+                
+            // Total costo_envio de las ventas asociadas
+            $totalCostosEnvio = DB::table('ventas')
+                ->join('envio_venta', 'ventas.id', '=', 'envio_venta.venta_id')
+                ->whereIn('envio_venta.envio_id', (clone $query)->select('id'))
+                ->sum('ventas.costo_envio');
             
             $sheet->setCellValue('A' . $row, 'RESUMEN EJECUTIVO:');
             $sheet->getStyle('A' . $row)->getFont()->setBold(true)->setSize(14);
@@ -373,7 +435,7 @@ class EnvioController extends Controller
             $row++;
             
             $sheet->setCellValue('A' . $row, 'Total de envíos:');
-            $sheet->setCellValue('B' . $row, $envios->count());
+            $sheet->setCellValue('B' . $row, $enviosCount);
             $sheet->getStyle('A' . $row)->getFont()->setBold(true);
             $row++;
             
@@ -396,12 +458,15 @@ class EnvioController extends Controller
             $sheet->getStyle('B' . $row)->getFont()->getColor()->setARGB('FF1E40AF');
             $row++;
             
+            $enviosPagadosCount = (clone $query)->where('estado_pago', 'pagado')->count();
+            $enviosPendientesCount = (clone $query)->where('estado_pago', 'pendiente')->count();
+            
             $sheet->setCellValue('A' . $row, 'Envíos pendientes de pago:');
-            $sheet->setCellValue('B' . $row, $envios->where('estado_pago', 'pendiente')->count());
+            $sheet->setCellValue('B' . $row, $enviosPendientesCount);
             $row++;
             
             $sheet->setCellValue('A' . $row, 'Envíos pagados:');
-            $sheet->setCellValue('B' . $row, $envios->where('estado_pago', 'pagado')->count());
+            $sheet->setCellValue('B' . $row, $enviosPagadosCount);
             $row += 2; // Espacio
         }
         
@@ -411,7 +476,8 @@ class EnvioController extends Controller
         
         // Datos principales
         $data = [];
-        foreach ($envios as $envio) {
+        $lazyQuery = (clone $query)->with('ventas');
+        foreach ($lazyQuery->lazy(250) as $envio) {
             $tipo = $envio->tipo_generacion === 'automatico' ? 'AUTOMÁTICO' : 'MANUAL';
             $periodo = ($envio->periodo_inicio && $envio->periodo_fin) 
                 ? $envio->periodo_inicio->format('d/m/Y') . ' - ' . $envio->periodo_fin->format('d/m/Y')
@@ -443,7 +509,8 @@ class EnvioController extends Controller
         $sheet->getStyle('A' . $row)->getFont()->getColor()->setARGB('FFFFFFFF');
         $row += 2;
         
-        foreach ($envios as $envio) {
+        $lazyQueryDetail = (clone $query)->with(['ventas.cliente', 'ventas.movimientos']);
+        foreach ($lazyQueryDetail->lazy(250) as $envio) {
             // Header del envío
             $sheet->setCellValue('A' . $row, 'Envío #' . $envio->id . ($envio->guia ? ' - ' . $envio->guia : ''));
             $sheet->getStyle('A' . $row)->getFont()->setBold(true);
@@ -500,20 +567,27 @@ class EnvioController extends Controller
     {
         // Construir query con filtros
         $query = $this->buildFilteredQuery($request);
-        $envios = $query->get();
-        
+
         // Preparar filtros
         $filtros = $this->buildFiltersList($request);
-        
+
         // Calcular estadísticas
         $estadisticas = [
-            'total' => $envios->count(),
-            'monto_total' => $envios->sum('monto_a_pagar'),
-            'total_ventas' => $envios->sum(function($e) { return $e->ventas->count(); }),
-            'total_costos_envio' => $envios->sum(function($e) { return $e->ventas->sum('costo_envio'); }),
-            'pendientes' => $envios->where('estado_pago', 'pendiente')->count(),
-            'pagados' => $envios->where('estado_pago', 'pagado')->count(),
+            'total' => (clone $query)->count(),
+            'monto_total' => (clone $query)->sum('monto_a_pagar'),
+            'total_ventas' => DB::table('envio_venta')
+                ->whereIn('envio_id', (clone $query)->select('id'))
+                ->count(),
+            'total_costos_envio' => DB::table('ventas')
+                ->join('envio_venta', 'ventas.id', '=', 'envio_venta.venta_id')
+                ->whereIn('envio_venta.envio_id', (clone $query)->select('id'))
+                ->sum('ventas.costo_envio'),
+            'pendientes' => (clone $query)->where('estado_pago', 'pendiente')->count(),
+            'pagados' => (clone $query)->where('estado_pago', 'pagado')->count(),
         ];
+        
+        // Limitar los resultados del PDF para evitar OOM con DOMPDF
+        $envios = $query->limit(200)->get();
         
         // Obtener estilos base
         $styles = $this->pdfReportService->getBaseStyles();

@@ -58,6 +58,31 @@ class AuthHelper
         return false;
     }
 
+    public static function isSupervisor(): bool
+    {
+        $roles = session('roles', []);
+
+        if (empty($roles)) {
+            return false;
+        }
+
+        foreach ($roles as $rol) {
+            $rolNombre = self::normalizeRoleName($rol['ROL'] ?? $rol['rol'] ?? '');
+            $rolId = $rol['ID'] ?? $rol['id'] ?? $rol['ROL_ID'] ?? $rol['rol_id'] ?? null;
+
+            if ($rolNombre === 'SUPERVISOR' || (string) $rolId === '20') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static function canManageSalesOperations(): bool
+    {
+        return self::isAdminLibreria() || self::isSupervisor();
+    }
+
     /**
      * Verifica si el usuario tiene acceso al sistema (Admin Librería o Supervisor)
      * Solo estos roles pueden ingresar al sistema

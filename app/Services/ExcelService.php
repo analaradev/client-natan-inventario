@@ -289,7 +289,23 @@ class ExcelService
             $data['codigo_barras'] = null;
         }
 
-        Libro::create($data);
+        $stockInicial = isset($data['stock']) ? (int)$data['stock'] : 0;
+        unset($data['stock']);
+
+        $libro = Libro::create($data);
+
+        if ($stockInicial > 0) {
+            \App\Models\Movimiento::create([
+                'libro_id' => $libro->id,
+                'tipo_movimiento' => 'entrada',
+                'tipo_entrada' => 'compra',
+                'cantidad' => $stockInicial,
+                'precio_unitario' => $libro->precio,
+                'fecha' => now()->toDateString(),
+                'observaciones' => 'Inventario inicial (Importación Excel)',
+                'usuario' => session('username') ?? auth()->user()->name ?? 'Admin',
+            ]);
+        }
     }
 
     /**

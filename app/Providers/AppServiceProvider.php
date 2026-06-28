@@ -6,6 +6,10 @@ use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\Blade;
 use App\Helpers\AuthHelper;
+use App\Models\Movimiento;
+use App\Models\Venta;
+use App\Observers\MovimientoObserver;
+use App\Observers\VentaObserver;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -22,6 +26,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Registrar Observers de inventario
+        Movimiento::observe(MovimientoObserver::class);
+        Venta::observe(VentaObserver::class);
+
         // Forzar HTTPS en producción
         if ($this->app->environment('production')) {
             URL::forceScheme('https');

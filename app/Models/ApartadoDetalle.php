@@ -36,7 +36,7 @@ class ApartadoDetalle extends Model
      */
     public function libro(): BelongsTo
     {
-        return $this->belongsTo(Libro::class);
+        return $this->belongsTo(Libro::class)->withTrashed();
     }
 
     /**

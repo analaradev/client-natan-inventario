@@ -4,87 +4,46 @@
 
 @section('content')
 <x-page-layout 
-    title="Sub-Inventario #{{ $subinventario->id }}"
+    title="{{ $subinventario->descripcion ?: 'Sub-Inventario #' . $subinventario->id }}"
     description="Detalle del sub-inventario"
     button-text="Volver a Sub-Inventarios"
     button-icon="fas fa-arrow-left"
     :button-route="route('subinventarios.index')"
 >
-    <!-- Información del sub-inventario -->
-    <x-card class="mb-6">
-        <div class="flex justify-between items-start mb-6">
-            <div>
-                <h3 class="text-xl font-bold text-gray-900 mb-2">
-                    {{ $subinventario->descripcion ?: 'Sub-Inventario #' . $subinventario->id }}
-                </h3>
-                <div class="space-y-1 text-sm text-gray-600">
-                    <p><i class="fas fa-calendar mr-2"></i><strong>Fecha:</strong> {{ $subinventario->fecha_subinventario->format('d/m/Y') }}</p>
-                    <p><i class="fas fa-user mr-2"></i><strong>Usuario:</strong> {{ $subinventario->usuario }}</p>
-                    <p><i class="fas fa-clock mr-2"></i><strong>Creado:</strong> {{ $subinventario->created_at->format('d/m/Y H:i') }}</p>
-                </div>
-            </div>
-            
-            <span class="px-3 py-2 inline-flex text-sm leading-5 font-semibold rounded-full {{ $subinventario->getBadgeColor() }}">
-                <i class="{{ $subinventario->getIcon() }} mr-2"></i>
-                {{ $subinventario->getEstadoLabel() }}
-            </span>
-        </div>
+    @php
+        $totalLibros = $subinventario->getTotalLibros();
+        $totalUnidades = $subinventario->getTotalUnidades();
+        $valorDisponible = $subinventario->libros->sum(fn ($libro) => (float) $libro->precio * (int) $libro->pivot->cantidad);
+    @endphp
 
-        @if($subinventario->observaciones)
-            <div class="bg-gray-50 p-4 rounded-lg">
-                <p class="text-sm text-gray-700">
-                    <i class="fas fa-comment mr-2 text-gray-500"></i>
-                    <strong>Observaciones:</strong> {{ $subinventario->observaciones }}
-                </p>
-            </div>
-        @endif
-    </x-card>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <x-stat-card 
+            icon="fas fa-book"
+            label="Títulos"
+            :value="$totalLibros"
+            bg-color="bg-gray-800"
+            icon-color="text-white"
+        />
+
+        <x-stat-card 
+            icon="fas fa-boxes"
+            label="Unidades Disponibles"
+            :value="$totalUnidades"
+            bg-color="bg-green-100"
+            icon-color="text-green-600"
+        />
+
+        <x-stat-card 
+            icon="fas fa-dollar-sign"
+            label="Valor Estimado"
+            :value="'$' . number_format($valorDisponible, 2)"
+            bg-color="bg-purple-100"
+            icon-color="text-purple-600"
+        />
+    </div>
 
     <!-- Libros en Sub-Inventario -->
     <x-card class="mb-6">
-        <div class="mb-4 flex justify-between items-center">
-            <div>
-                <h3 class="text-lg font-semibold text-gray-900">
-                    <i class="fas fa-book mr-2 text-blue-600"></i>Libros en Sub-Inventario
-                </h3>
-                <p class="text-sm text-gray-600 mt-1">
-                    Total: {{ $subinventario->getTotalLibros() }} libros - {{ $subinventario->getTotalUnidades() }} unidades
-                </p>
-            </div>
-            
-            <!-- Botones de exportación e importación -->
-            <div class="flex gap-3">
-                @if($subinventario->estado === 'activo')
-                    <x-button 
-                        type="button" 
-                        variant="primary" 
-                        icon="fas fa-plus-circle"
-                        onclick="window.location='{{ route('subinventarios.import-form', $subinventario) }}'"
-                    >
-                        Importar Libros
-                    </x-button>
-                @endif
-
-                <x-button 
-                    type="button" 
-                    variant="success" 
-                    icon="fas fa-file-excel"
-                    onclick="window.location='{{ route('subinventarios.libros.export.excel', $subinventario) }}'"
-                >
-                    Exportar Excel
-                </x-button>
-                
-                <x-button 
-                    type="button" 
-                    variant="danger" 
-                    icon="fas fa-file-pdf"
-                    onclick="window.location='{{ route('subinventarios.libros.export.pdf', $subinventario) }}'"
-                >
-                    Exportar PDF
-                </x-button>
-            </div>
-        </div>
-
         @if($libros->count() > 0)
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-200">
@@ -94,7 +53,7 @@
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Libro</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Código</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Precio</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cantidad en Sub-Inventario</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cantidades en Sub-Inventario</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stock Actual</th>
                             @if($subinventario->estado === 'activo')
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
@@ -107,8 +66,8 @@
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-700">
                                     {{ $libro->id }}
                                 </td>
-                                <td class="px-6 py-4">
-                                    <div class="text-sm font-medium text-gray-900">{{ $libro->nombre }}</div>
+                                <td class="px-6 py-4 max-w-md whitespace-normal break-words">
+                                    <div class="text-sm font-medium text-gray-900 break-words">{{ $libro->nombre }}</div>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                     {{ $libro->codigo_barras }}
@@ -117,9 +76,28 @@
                                     ${{ number_format($libro->precio, 2) }}
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap">
-                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                        {{ $libro->pivot->cantidad }} unidades
-                                    </span>
+                                    @php
+                                        $reservado = (int) \DB::table('apartado_detalles as ad')
+                                            ->join('apartados as a', 'a.id', '=', 'ad.apartado_id')
+                                            ->where('ad.libro_id', $libro->id)
+                                            ->where('a.subinventario_id', $subinventario->id)
+                                            ->where('a.tipo_inventario', 'subinventario')
+                                            ->where('a.estado', 'activo')
+                                            ->sum('ad.cantidad');
+                                    @endphp
+                                    <div class="flex flex-col gap-1 text-xs">
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full font-medium bg-blue-100 text-blue-800" style="width: max-content; max-width: 100%;">
+                                            Disponible: {{ $libro->pivot->cantidad }} uds
+                                        </span>
+                                        @if($reservado > 0)
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full font-medium bg-yellow-100 text-yellow-800" style="width: max-content; max-width: 100%;">
+                                                Apartado: {{ $reservado }} uds
+                                            </span>
+                                            <span class="text-gray-400 font-medium pl-1">
+                                                Total Físico: {{ $libro->pivot->cantidad + $reservado }} uds
+                                            </span>
+                                        @endif
+                                    </div>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                     {{ $libro->stock }} 
@@ -156,16 +134,73 @@
         @endif
     </x-card>
 
-    <!-- Acciones -->
-    @if($subinventario->estado === 'activo')
-        <x-card title="Acciones" class="lg:w-1/2 lg:ml-auto">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Datos del sub-inventario -->
+        <x-card title="Datos del Sub-Inventario">
+            <div class="flex justify-between items-start gap-4">
+                <div class="space-y-2 text-sm text-gray-600">
+                    <p><i class="fas fa-calendar mr-2"></i><strong>Fecha:</strong> {{ $subinventario->fecha_subinventario->format('d/m/Y') }}</p>
+                    <p><i class="fas fa-user mr-2"></i><strong>Usuario:</strong> {{ $subinventario->usuario }}</p>
+                    <p><i class="fas fa-clock mr-2"></i><strong>Creado:</strong> {{ $subinventario->created_at->format('d/m/Y H:i') }}</p>
+                </div>
+
+                <span class="px-3 py-2 inline-flex text-sm leading-5 font-semibold rounded-full {{ $subinventario->getBadgeColor() }}">
+                    <i class="{{ $subinventario->getIcon() }} mr-2"></i>
+                    {{ $subinventario->getEstadoLabel() }}
+                </span>
+            </div>
+
+            @if($subinventario->observaciones)
+                <div class="bg-gray-50 p-4 rounded-lg mt-4">
+                    <p class="text-sm text-gray-700">
+                        <i class="fas fa-comment mr-2 text-gray-500"></i>
+                        <strong>Observaciones:</strong> {{ $subinventario->observaciones }}
+                    </p>
+                </div>
+            @endif
+        </x-card>
+
+        <!-- Acciones -->
+        <x-card title="Acciones">
             <div class="space-y-3">
-                <x-button variant="warning" icon="fas fa-edit" href="{{ route('subinventarios.edit', $subinventario) }}" class="w-full justify-center">
-                    Editar
+                @if($subinventario->estado === 'activo')
+                    <x-button variant="warning" icon="fas fa-edit" href="{{ route('subinventarios.edit', $subinventario) }}" class="w-full justify-center">
+                        Editar
+                    </x-button>
+
+                    <x-button 
+                        type="button" 
+                        variant="primary" 
+                        icon="fas fa-plus-circle"
+                        onclick="window.location='{{ route('subinventarios.import-form', $subinventario) }}'"
+                        class="w-full justify-center"
+                    >
+                        Importar Libros
+                    </x-button>
+                @endif
+
+                <x-button 
+                    type="button" 
+                    variant="success" 
+                    icon="fas fa-file-excel"
+                    onclick="window.location='{{ route('subinventarios.libros.export.excel', $subinventario) }}'"
+                    class="w-full justify-center"
+                >
+                    Exportar Excel
+                </x-button>
+                
+                <x-button 
+                    type="button" 
+                    variant="danger" 
+                    icon="fas fa-file-pdf"
+                    onclick="window.location='{{ route('subinventarios.libros.export.pdf', $subinventario) }}'"
+                    class="w-full justify-center"
+                >
+                    Exportar PDF
                 </x-button>
             </div>
         </x-card>
-    @endif
+    </div>
 </x-page-layout>
 
 @push('scripts')
