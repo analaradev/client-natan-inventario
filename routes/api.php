@@ -103,7 +103,7 @@ Route::get('/reparar-datos-produccion/{secret_key}', function ($secret_key) {
 
         return response()->json([
             'success' => true,
-            'message' => 'Reparacion de datos completada correctamente.',
+            'message' => 'Reparacion de datos completada correctamente. No se modifico la estructura de la base de datos.',
             'output' => [
                 'inventario' => $inventarioOutput,
                 'caja' => $cajaOutput,

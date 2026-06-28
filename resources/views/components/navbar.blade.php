@@ -10,17 +10,17 @@
 </style>
 
 <nav id="navbar" class="fixed top-0 left-0 right-0 bg-white border-b border-gray-200 z-50">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between h-16" data-navbar-inner>
             <!-- Logo -->
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-3 shrink-0">
                 <div class="w-10 h-10 bg-gradient-to-br from-gray-800 to-gray-600 rounded-xl flex items-center justify-center shadow-md">
                     <i class="fas fa-dove text-white text-lg"></i>
                 </div>
             </div>
 
             <!-- Menú Desktop -->
-            <div class="hidden md:flex items-center space-x-1" data-navbar-menu>
+            <div class="hidden md:flex items-center space-x-1 shrink-0" data-navbar-menu>
                 <a href="{{ route('dashboard') }}" 
                    class="px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 whitespace-nowrap
                           {{ request()->routeIs('dashboard') 
@@ -104,7 +104,7 @@
             </div>
 
             <!-- Usuario Desktop -->
-            <div class="hidden md:flex items-center gap-3">
+            <div class="hidden md:flex items-center gap-3 shrink-0" data-navbar-user>
                 <div class="text-right">
                     <p class="text-sm font-semibold text-gray-800">{{ session('username', 'Usuario') }}</p>
                     <p class="text-xs text-gray-500">
@@ -288,21 +288,38 @@ document.addEventListener('DOMContentLoaded', function() {
     const navbar = document.getElementById('navbar');
     const navbarInner = navbar?.querySelector('[data-navbar-inner]');
     const navbarMenu = navbar?.querySelector('[data-navbar-menu]');
+    let navbarMeasureQueued = false;
 
     function ajustarNavbar() {
         if (!navbar || !navbarInner || !navbarMenu) return;
+        if (window.innerWidth < 768) {
+            navbar.classList.remove('navbar-compact');
+            return;
+        }
 
-        navbar.classList.remove('navbar-compact');
+        if (navbarMeasureQueued) return;
+        navbarMeasureQueued = true;
+
         requestAnimationFrame(() => {
-            const sePasa = navbarInner.scrollWidth > navbarInner.clientWidth + 1
-                || navbarMenu.scrollWidth > navbarMenu.clientWidth + 1;
+            navbar.classList.remove('navbar-compact');
 
-            navbar.classList.toggle('navbar-compact', sePasa);
+            requestAnimationFrame(() => {
+                const sePasa = navbarInner.scrollWidth > navbarInner.clientWidth + 1;
+
+                navbar.classList.toggle('navbar-compact', sePasa);
+                navbarMeasureQueued = false;
+            });
         });
     }
 
     ajustarNavbar();
     window.addEventListener('resize', ajustarNavbar);
+    window.addEventListener('load', ajustarNavbar);
+
+    if (document.fonts?.ready) {
+        document.fonts.ready.then(ajustarNavbar);
+    }
+
     if ('ResizeObserver' in window && navbarInner) {
         new ResizeObserver(ajustarNavbar).observe(navbarInner);
     }
