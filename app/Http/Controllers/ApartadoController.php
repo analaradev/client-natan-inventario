@@ -763,6 +763,7 @@ class ApartadoController extends Controller
                 'cliente_id' => 'required|exists:clientes,id',
                 'fecha_apartado' => 'required|date',
                 'enganche' => 'required|numeric|min:0',
+                'metodo_pago' => 'nullable|in:efectivo,tarjeta,transferencia,no_especificado',
                 'fecha_limite' => 'nullable|date|after:today',
                 'observaciones' => 'nullable|string|max:500',
                 'usuario' => 'required|string',
@@ -930,7 +931,7 @@ class ApartadoController extends Controller
                     'monto' => $validated['enganche'],
                     'saldo_anterior' => $montoTotal,
                     'saldo_nuevo' => $montoTotal - $validated['enganche'],
-                    'metodo_pago' => 'efectivo',
+                    'metodo_pago' => $validated['metodo_pago'] ?? 'no_especificado',
                     'observaciones' => 'Enganche inicial desde app móvil',
                     'usuario' => $validated['usuario'],
                 ]);
