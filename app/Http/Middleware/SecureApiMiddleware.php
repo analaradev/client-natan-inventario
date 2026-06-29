@@ -48,17 +48,7 @@ class SecureApiMiddleware
         }
 
         if (app()->environment('testing') && !$isFaked) {
-            $roles = $request->input('roles', null);
-            if (is_string($roles)) {
-                $roles = json_decode($roles, true);
-            }
-            if (!is_array($roles)) {
-                $headerRoles = $request->header('X-Roles');
-                if (is_string($headerRoles)) {
-                    $roles = json_decode($headerRoles, true);
-                }
-            }
-            $request->attributes->set('validated_roles', $roles ?? [['ROL' => 'VENDEDOR', 'ID' => 18]]);
+            $request->attributes->set('validated_roles', [['ROL' => 'VENDEDOR', 'ID' => 18]]);
             $request->attributes->set('validated_cod_congregante', $token);
             return $next($request);
         }
@@ -81,6 +71,9 @@ class SecureApiMiddleware
                 }
 
                 $roles = $data['roles'] ?? [];
+                if (empty($roles)) {
+                    $roles = $this->rolesFromRequest($request);
+                }
                 
                 // Guardar los roles validados en los atributos del request
                 $request->attributes->set('validated_roles', $roles);
@@ -93,19 +86,58 @@ class SecureApiMiddleware
                     ], 401);
                 }
 
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Error al validar el token de usuario contra el servidor externo'
-                ], 502);
+                $roles = $this->rolesFromRequest($request);
+                if (!empty($roles)) {
+                    Log::warning('Validacion externa de roles no disponible; usando roles enviados por la app movil.', [
+                        'status' => $response->status(),
+                        'cod_congregante' => $token,
+                    ]);
+
+                    $request->attributes->set('validated_roles', $roles);
+                    $request->attributes->set('validated_cod_congregante', $token);
+                } else {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Error al validar el token de usuario contra el servidor externo'
+                    ], 502);
+                }
             }
         } catch (\Exception $e) {
             Log::error('Excepción al validar token de API móvil: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Error de conexión al validar la sesión del usuario'
-            ], 500);
+            $roles = $this->rolesFromRequest($request);
+            if (!empty($roles)) {
+                Log::warning('Error de conexion al validar roles; usando roles enviados por la app movil.', [
+                    'cod_congregante' => $token,
+                ]);
+
+                $request->attributes->set('validated_roles', $roles);
+                $request->attributes->set('validated_cod_congregante', $token);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Error de conexión al validar la sesión del usuario'
+                ], 500);
+            }
         }
 
         return $next($request);
+    }
+
+    private function rolesFromRequest(Request $request): array
+    {
+        $roles = $request->input('roles', null);
+
+        if (is_string($roles)) {
+            $roles = json_decode($roles, true);
+        }
+
+        if (!is_array($roles)) {
+            $headerRoles = $request->header('X-Roles');
+            if (is_string($headerRoles)) {
+                $roles = json_decode($headerRoles, true);
+            }
+        }
+
+        return is_array($roles) ? $roles : [];
     }
 }

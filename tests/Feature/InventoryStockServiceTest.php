@@ -615,6 +615,12 @@ class InventoryStockServiceTest extends TestCase
 
     public function test_api_store_admin_mixed_payment_updates_total_pagado(): void
     {
+        \Illuminate\Support\Facades\Http::fake([
+            'https://www.sistemasdevida.com/pan/rest2/index.php/app/roles/TEST_TOKEN_123' => \Illuminate\Support\Facades\Http::response([
+                'roles' => [['ROL' => 'ADMIN LIBRERIA', 'ID' => 19]],
+            ]),
+        ]);
+
         $libro = $this->book(stock: 10);
         
         $response = $this->postJson('/api/v1/movil/admin/ventas', [
