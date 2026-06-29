@@ -284,9 +284,6 @@
                             <div class="font-medium text-gray-900">
                                 {{ $venta->fecha_venta->format('d/m/Y') }}
                             </div>
-                            <div class="text-xs text-gray-500">
-                                {{ $venta->fecha_venta->format('H:i') }}
-                            </div>
                         </div>
                     </x-data-table-cell>
 

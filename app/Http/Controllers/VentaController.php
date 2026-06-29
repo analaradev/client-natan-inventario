@@ -144,7 +144,7 @@ class VentaController extends Controller
         $ordenar = $request->get('ordenar', 'reciente');
         switch ($ordenar) {
             case 'antiguo':
-                $query->orderBy('fecha_venta', 'asc');
+                $query->orderBy('id', 'asc');
                 break;
             case 'monto_mayor':
                 $query->orderBy('total', 'desc');
@@ -161,7 +161,7 @@ class VentaController extends Controller
                 $query->orderByRaw('(total - total_pagado) DESC');
                 break;
             default: // reciente
-                $query->orderBy('fecha_venta', 'desc');
+                $query->orderBy('id', 'desc');
                 break;
         }
 
