@@ -174,8 +174,8 @@ class SubInventarioController extends Controller
      */
     public function show(SubInventario $subinventario)
     {
-        // Obtener libros paginados (10 por página)
-        $libros = $subinventario->libros()->paginate(10);
+        // Obtener libros paginados (10 por página) ordenados por ID
+        $libros = $subinventario->libros()->orderBy('libros.id', 'asc')->paginate(10);
         
         return view('subinventarios.show', compact('subinventario', 'libros'));
     }
@@ -1566,7 +1566,7 @@ class SubInventarioController extends Controller
      */
     public function exportLibrosExcel(SubInventario $subinventario)
     {
-        $libros = $subinventario->libros;
+        $libros = $subinventario->libros()->orderBy('libros.id', 'asc')->get();
         
         // Crear spreadsheet usando el servicio
         $spreadsheet = $this->excelReportService->createSpreadsheet();
@@ -1626,7 +1626,7 @@ class SubInventarioController extends Controller
      */
     public function exportLibrosPdf(SubInventario $subinventario)
     {
-        $libros = $subinventario->libros;
+        $libros = $subinventario->libros()->orderBy('libros.id', 'asc')->get();
         
         // Obtener estilos base del servicio
         $styles = $this->pdfReportService->getBaseStyles();
