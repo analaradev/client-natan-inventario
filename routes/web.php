@@ -57,6 +57,10 @@ Route::middleware('checkauth')->group(function () {
         // Movimientos - Solo crear, editar, eliminar requieren Admin Librería
         Route::get('/movimientos/create', [MovimientoController::class, 'create'])->name('movimientos.create');
         Route::post('/movimientos', [MovimientoController::class, 'store'])->name('movimientos.store');
+        Route::get('/movimientos/ajuste-masivo/create', [MovimientoController::class, 'createMasivo'])->name('movimientos.masivo.create');
+        Route::post('/movimientos/ajuste-masivo', [MovimientoController::class, 'storeMasivo'])->name('movimientos.masivo.store');
+        Route::get('/movimientos/ajuste-masivo/plantilla', [MovimientoController::class, 'downloadMasivoTemplate'])->name('movimientos.masivo.template');
+        Route::post('/movimientos/ajuste-masivo/importar', [MovimientoController::class, 'previewMasivoImport'])->name('movimientos.masivo.import.preview');
         Route::get('/movimientos/{movimiento}/edit', [MovimientoController::class, 'edit'])->name('movimientos.edit');
         Route::put('/movimientos/{movimiento}', [MovimientoController::class, 'update'])->name('movimientos.update');
         Route::delete('/movimientos/{movimiento}', [MovimientoController::class, 'destroy'])->name('movimientos.destroy');

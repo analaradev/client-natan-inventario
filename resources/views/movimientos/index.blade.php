@@ -16,13 +16,22 @@
 >
     <x-slot name="header">
         @if($isAdminLibreria)
-            <x-button 
-                variant="primary" 
-                icon="fas fa-plus"
-                onclick="window.location='{{ route('movimientos.create') }}'"
-            >
-                Registrar Movimiento
-            </x-button>
+            <div class="flex flex-wrap gap-3">
+                <x-button
+                    variant="secondary"
+                    icon="fas fa-layer-group"
+                    onclick="window.location='{{ route('movimientos.masivo.create') }}'"
+                >
+                    Ajuste Masivo
+                </x-button>
+                <x-button
+                    variant="primary"
+                    icon="fas fa-plus"
+                    onclick="window.location='{{ route('movimientos.create') }}'"
+                >
+                    Registrar Movimiento
+                </x-button>
+            </div>
         @else
             <button 
                 disabled
@@ -165,7 +174,7 @@
     <!-- Tabla de movimientos -->
     <x-card>
         <x-table 
-            :headers="['Fecha', 'Libro', 'Tipo', 'Movimiento', 'Cantidad', 'Usuario', 'Acciones']"
+            :headers="['Fecha', 'Libro', 'Tipo', 'Movimiento', 'Origen', 'Cantidad', 'Usuario', 'Acciones']"
             :items="$movimientos"
             emptyMessage="No hay movimientos registrados"
             emptyIcon="fas fa-exchange-alt"
@@ -194,6 +203,11 @@
                             <i class="{{ $movimiento->getIcon() }}"></i>
                             {{ $movimiento->getTipoLabel() }}
                         </span>
+                        @if($movimiento->ajusteMasivo)
+                            <div class="mt-1 text-gray-500" style="word-break: break-all; font-family: monospace; font-size: 10px;" title="{{ $movimiento->ajusteMasivo->folio }}">
+                                <i class="fas fa-layer-group mr-1" style="font-size: 9px;"></i>{{ $movimiento->ajusteMasivo->folio }}
+                            </div>
+                        @endif
                     </x-table-cell>
                     <x-table-cell align="center">
                         @if($movimiento->tipo_movimiento === 'entrada')
@@ -209,6 +223,12 @@
                                 </span>
                             </div>
                         @endif
+                    </x-table-cell>
+                    <x-table-cell>
+                        <div class="text-sm text-gray-700">
+                            <i class="{{ $movimiento->subinventario_id ? 'fas fa-store' : 'fas fa-warehouse' }} text-gray-400 mr-1"></i>
+                            {{ $movimiento->getOrigenLabel() }}
+                        </div>
                     </x-table-cell>
                     <x-table-cell align="center">
                         <span class="text-lg font-bold {{ $movimiento->tipo_movimiento === 'entrada' ? 'text-green-600' : 'text-red-600' }}">

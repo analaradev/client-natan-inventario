@@ -13,6 +13,8 @@ class Movimiento extends Model
     protected $fillable = [
         'libro_id',
         'venta_id',
+        'subinventario_id',
+        'ajuste_masivo_id',
         'tipo_movimiento',
         'tipo_entrada',
         'tipo_salida',
@@ -43,6 +45,25 @@ class Movimiento extends Model
     public function venta(): BelongsTo
     {
         return $this->belongsTo(Venta::class);
+    }
+
+    public function subinventario(): BelongsTo
+    {
+        return $this->belongsTo(SubInventario::class, 'subinventario_id')->withTrashed();
+    }
+
+    public function ajusteMasivo(): BelongsTo
+    {
+        return $this->belongsTo(AjusteMasivo::class);
+    }
+
+    public function getOrigenLabel(): string
+    {
+        if ($this->subinventario) {
+            return 'Subinventario #' . $this->subinventario->id . ' - ' . ($this->subinventario->descripcion ?? 'Sin descripción');
+        }
+
+        return 'Inventario general';
     }
 
     // Tipos de entrada con etiquetas

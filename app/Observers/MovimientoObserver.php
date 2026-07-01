@@ -49,6 +49,9 @@ class MovimientoObserver
                 if ($venta && $venta->es_a_plazos && $venta->estado_pago !== 'completado') {
                     $libro->increment('stock_apartado', $cantidad);
                 }
+            } elseif ($movimiento->subinventario_id) {
+                $libro->decrement('stock_subinventario', $cantidad);
+                $this->decrementSubinventoryPivot($movimiento->subinventario_id, $libro->id, $cantidad);
             } else {
                 $libro->decrement('stock', $cantidad);
             }
@@ -79,6 +82,9 @@ class MovimientoObserver
                 } else {
                     $libro->increment('stock', $cantidad);
                 }
+            } elseif ($movimiento->subinventario_id) {
+                $libro->increment('stock_subinventario', $cantidad);
+                $this->incrementSubinventoryPivot($movimiento->subinventario_id, $libro->id, $cantidad);
             } else {
                 $libro->increment('stock', $cantidad);
             }
@@ -114,6 +120,13 @@ class MovimientoObserver
                     $libro->save();
                 }
             }
+            return;
+        }
+
+        // Entrada directa a subinventario (ajuste positivo, donación recibida, etc.).
+        if ($movimiento->subinventario_id) {
+            $libro->increment('stock_subinventario', $cantidad);
+            $this->incrementSubinventoryPivot($movimiento->subinventario_id, $libro->id, $cantidad);
             return;
         }
 
@@ -174,6 +187,16 @@ class MovimientoObserver
                     $libro->decrement('stock', $cantidad);
                 }
             }
+            return;
+        }
+
+        // Salida directa desde subinventario (merma, ajuste, donación, préstamo, etc.).
+        if ($movimiento->subinventario_id) {
+            if ($validate) {
+                $this->validateSubinventoryStock($movimiento->subinventario_id, $libro->id, $cantidad, $libro->nombre);
+            }
+            $libro->decrement('stock_subinventario', $cantidad);
+            $this->decrementSubinventoryPivot($movimiento->subinventario_id, $libro->id, $cantidad);
             return;
         }
 

@@ -1,6 +1,7 @@
 @props([
     'action',
     'libros' => [],
+    'subinventarios' => [],
     'submitText' => 'Registrar Movimiento'
 ])
 
@@ -18,6 +19,144 @@
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Tipo de inventario / ubicación afectada -->
+        <div id="origenStockContainer" class="lg:col-span-2">
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+                Tipo de Inventario <span class="text-red-500">*</span>
+            </label>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Inventario General -->
+                <label class="relative block cursor-pointer">
+                    <input
+                        type="radio"
+                        name="origen_stock"
+                        value="general"
+                        id="origen_stock_general"
+                        {{ old('origen_stock', 'general') == 'general' ? 'checked' : '' }}
+                        class="radio-inventario sr-only"
+                    >
+                    <div class="inventario-box p-4 bg-white border-2 border-gray-200 rounded-lg transition-all hover:border-blue-300 hover:shadow-md">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-3">
+                                <div class="inventario-icon flex-shrink-0 w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center transition-colors">
+                                    <i class="fas fa-warehouse text-xl text-blue-600"></i>
+                                </div>
+                                <div>
+                                    <p class="font-semibold text-gray-900">Inventario General</p>
+                                    <p class="text-sm text-gray-500">Stock disponible en bodega</p>
+                                </div>
+                            </div>
+                            <div class="flex-shrink-0">
+                                <div class="inventario-check w-6 h-6 border-2 border-gray-300 rounded-full flex items-center justify-center transition-all">
+                                    <i class="fas fa-check text-xs text-white opacity-0"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </label>
+
+                <!-- Subinventario -->
+                <label class="relative block cursor-pointer">
+                    <input
+                        type="radio"
+                        name="origen_stock"
+                        value="subinventario"
+                        id="origen_stock_subinventario"
+                        {{ old('origen_stock') == 'subinventario' ? 'checked' : '' }}
+                        class="radio-inventario sr-only"
+                    >
+                    <div class="inventario-box p-4 bg-white border-2 border-gray-200 rounded-lg transition-all hover:border-green-300 hover:shadow-md">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-3">
+                                <div class="inventario-icon flex-shrink-0 w-12 h-12 bg-green-100 rounded-full flex items-center justify-center transition-colors">
+                                    <i class="fas fa-box-open text-xl text-green-600"></i>
+                                </div>
+                                <div>
+                                    <p class="font-semibold text-gray-900">Subinventario</p>
+                                    <p class="text-sm text-gray-500">Stock asignado a punto de venta</p>
+                                </div>
+                            </div>
+                            <div class="flex-shrink-0">
+                                <div class="inventario-check w-6 h-6 border-2 border-gray-300 rounded-full flex items-center justify-center transition-all">
+                                    <i class="fas fa-check text-xs text-white opacity-0"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </label>
+            </div>
+
+            <style>
+                #origenStockContainer input[type="radio"][value="general"]:checked ~ .inventario-box {
+                    border-color: #3B82F6 !important;
+                    background-color: #EFF6FF !important;
+                }
+                #origenStockContainer input[type="radio"][value="general"]:checked ~ .inventario-box .inventario-icon {
+                    background-color: #3B82F6 !important;
+                }
+                #origenStockContainer input[type="radio"][value="general"]:checked ~ .inventario-box .inventario-icon i {
+                    color: white !important;
+                }
+                #origenStockContainer input[type="radio"][value="general"]:checked ~ .inventario-box .inventario-check {
+                    background-color: #3B82F6 !important;
+                    border-color: #3B82F6 !important;
+                }
+                #origenStockContainer input[type="radio"][value="general"]:checked ~ .inventario-box .inventario-check i {
+                    opacity: 1 !important;
+                }
+
+                #origenStockContainer input[type="radio"][value="subinventario"]:checked ~ .inventario-box {
+                    border-color: #10B981 !important;
+                    background-color: #ECFDF5 !important;
+                }
+                #origenStockContainer input[type="radio"][value="subinventario"]:checked ~ .inventario-box .inventario-icon {
+                    background-color: #10B981 !important;
+                }
+                #origenStockContainer input[type="radio"][value="subinventario"]:checked ~ .inventario-box .inventario-icon i {
+                    color: white !important;
+                }
+                #origenStockContainer input[type="radio"][value="subinventario"]:checked ~ .inventario-box .inventario-check {
+                    background-color: #10B981 !important;
+                    border-color: #10B981 !important;
+                }
+                #origenStockContainer input[type="radio"][value="subinventario"]:checked ~ .inventario-box .inventario-check i {
+                    opacity: 1 !important;
+                }
+            </style>
+            @error('origen_stock')
+                <p class="mt-1 text-sm text-red-500">{{ $message }}</p>
+            @enderror
+        </div>
+
+        <div id="subinventarioContainer" class="hidden lg:col-span-2">
+            <label for="subinventario_id" class="block text-sm font-medium text-gray-700 mb-2">
+                Subinventario <span class="text-red-500">*</span>
+            </label>
+            <div class="relative">
+                <span class="absolute left-3 top-2.5 text-gray-400">
+                    <i class="fas fa-store"></i>
+                </span>
+                <select name="subinventario_id" id="subinventario_id"
+                        class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 @error('subinventario_id') border-red-500 @enderror">
+                    <option value="">Selecciona el subinventario</option>
+                    @foreach($subinventarios as $subinventario)
+                        <option value="{{ $subinventario->id }}" {{ old('subinventario_id', $subinventarios->count() === 1 ? $subinventario->id : null) == $subinventario->id ? 'selected' : '' }}>
+                            #{{ $subinventario->id }} - {{ $subinventario->descripcion ?? 'Sin descripción' }}
+                            @if($subinventario->fecha_subinventario)
+                                ({{ $subinventario->fecha_subinventario->format('d/m/Y') }})
+                            @endif
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+            <p class="mt-1 text-sm text-gray-500">
+                <i class="fas fa-info-circle"></i> El movimiento afectará directamente el stock disponible en este subinventario
+            </p>
+            @error('subinventario_id')
+                <p class="mt-1 text-sm text-red-500">{{ $message }}</p>
+            @enderror
+        </div>
+
         <!-- Selección de Libro con Buscador -->
         <div class="lg:col-span-2">
             <x-libro-search-filter 
@@ -257,6 +396,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const precioFinalTexto = document.getElementById('precioFinalTexto');
     const stockValidationBanner = document.getElementById('stockValidationBanner');
     const stockValidationMessage = document.getElementById('stockValidationMessage');
+    const origenStockInputs = document.querySelectorAll('input[name="origen_stock"]');
+    const subinventarioContainer = document.getElementById('subinventarioContainer');
+    const subinventarioSelect = document.getElementById('subinventario_id');
     
     // Verificar que los elementos existan
     if (!cantidadInput || !libroIdInput || !stockInfo || !descuentoInput || !precioInfo) {
@@ -267,6 +409,110 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentStock = null;
     let currentTipo = null;
     let currentPrecio = null;
+    const librosData = @json($libros);
+    const subinventariosData = @json($subinventarios);
+
+    function currentOrigenStock() {
+        const selected = document.querySelector('input[name="origen_stock"]:checked');
+        return selected ? selected.value : 'general';
+    }
+
+    function subinventarioSeleccionado() {
+        if (!subinventarioSelect || !subinventarioSelect.value) {
+            return null;
+        }
+
+        return subinventariosData.find(item => item.id == subinventarioSelect.value) || null;
+    }
+
+    function librosDisponiblesParaUbicacion() {
+        if (currentOrigenStock() !== 'subinventario') {
+            return librosData;
+        }
+
+        const subinventario = subinventarioSeleccionado();
+        if (!subinventario) {
+            return [];
+        }
+
+        return (subinventario.libros || []).map(libro => {
+            const base = librosData.find(item => item.id == libro.id) || {};
+            return {
+                ...base,
+                ...libro,
+                stock: Number(libro.pivot?.cantidad ?? 0),
+            };
+        });
+    }
+
+    function actualizarBuscadorLibros(preservarSeleccion = false) {
+        const esSubinventario = currentOrigenStock() === 'subinventario';
+        const librosFiltrados = librosDisponiblesParaUbicacion();
+        const selected = preservarSeleccion ? libroIdInput.value : null;
+        const placeholder = esSubinventario
+            ? (subinventarioSeleccionado() ? 'Buscar libro en este subinventario...' : 'Primero selecciona un subinventario...')
+            : 'Buscar libro en inventario general...';
+
+        window.dispatchEvent(new CustomEvent('libro-search-filter:update', {
+            detail: {
+                name: 'libro_id',
+                libros: librosFiltrados,
+                placeholder,
+                selected,
+            },
+        }));
+    }
+
+    function stockEnSubinventario(libroId) {
+        if (!libroId) {
+            return null;
+        }
+
+        const subinventario = subinventarioSeleccionado();
+        const libro = subinventario?.libros?.find(item => item.id == libroId);
+        return libro?.pivot?.cantidad ?? 0;
+    }
+
+    function refreshSelectedBookStock() {
+        if (!libroIdInput.value) {
+            stockInfo.classList.add('hidden');
+            precioInfo.classList.add('hidden');
+            currentStock = null;
+            currentPrecio = null;
+            return;
+        }
+
+        const libro = librosDisponiblesParaUbicacion().find(l => l.id == libroIdInput.value)
+            || librosData.find(l => l.id == libroIdInput.value);
+        if (!libro) {
+            return;
+        }
+
+        const origen = currentOrigenStock();
+        const subStock = origen === 'subinventario' ? stockEnSubinventario(libro.id) : null;
+        currentStock = subStock !== null ? subStock : libro.stock;
+        currentPrecio = parseFloat(libro.precio);
+        stockActualSpan.textContent = `${currentStock} unidades${origen === 'subinventario' ? ' en subinventario' : ''}`;
+        precioOriginalSpan.textContent = `$${currentPrecio.toFixed(2)}`;
+        stockInfo.classList.remove('hidden');
+        precioInfo.classList.remove('hidden');
+        updateStockResultante();
+        updatePrecioConDescuento();
+    }
+
+    function toggleSubinventarioSelector() {
+        const showSubinventario = currentOrigenStock() === 'subinventario';
+        subinventarioContainer.classList.toggle('hidden', !showSubinventario);
+        if (subinventarioSelect) {
+            subinventarioSelect.required = showSubinventario;
+            if (showSubinventario && !subinventarioSelect.value && subinventariosData.length === 1) {
+                subinventarioSelect.value = subinventariosData[0].id;
+            }
+            if (!showSubinventario) {
+                subinventarioSelect.value = '';
+            }
+        }
+    }
 
     function hideStockValidationBanner() {
         if (stockValidationBanner) {
@@ -338,29 +584,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Escuchar cambios en el libro seleccionado
-    const librosData = @json($libros);
-    
     libroIdInput.addEventListener('change', function() {
         console.log('Libro cambiado:', this.value);
-        if (this.value) {
-            const libro = librosData.find(l => l.id == this.value);
-            console.log('Libro encontrado:', libro);
-            if (libro) {
-                currentStock = libro.stock;
-                currentPrecio = parseFloat(libro.precio);
-                stockActualSpan.textContent = `${currentStock} unidades`;
-                precioOriginalSpan.textContent = `$${currentPrecio.toFixed(2)}`;
-                stockInfo.classList.remove('hidden');
-                precioInfo.classList.remove('hidden');
-                updateStockResultante();
-                updatePrecioConDescuento();
-            }
-        } else {
-            stockInfo.classList.add('hidden');
-            precioInfo.classList.add('hidden');
-            currentStock = null;
-            currentPrecio = null;
-        }
+        refreshSelectedBookStock();
     });
     
     // Observar cambios en el input hidden para detectar selección de libro
@@ -387,16 +613,35 @@ document.addEventListener('DOMContentLoaded', function() {
                 tipoSalidaContainer.classList.add('hidden');
                 document.getElementById('tipo_entrada').required = true;
                 document.getElementById('tipo_salida').required = false;
+                toggleSubinventarioSelector();
             } else {
                 tipoSalidaContainer.classList.remove('hidden');
                 tipoEntradaContainer.classList.add('hidden');
                 document.getElementById('tipo_salida').required = true;
                 document.getElementById('tipo_entrada').required = false;
+                toggleSubinventarioSelector();
             }
             
-            updateStockResultante();
+            refreshSelectedBookStock();
         });
     });
+
+    origenStockInputs.forEach(radio => {
+        radio.addEventListener('change', function() {
+            toggleSubinventarioSelector();
+            actualizarBuscadorLibros();
+            hideStockValidationBanner();
+            refreshSelectedBookStock();
+        });
+    });
+
+    if (subinventarioSelect) {
+        subinventarioSelect.addEventListener('change', function() {
+            actualizarBuscadorLibros();
+            hideStockValidationBanner();
+            refreshSelectedBookStock();
+        });
+    }
     
     // Actualizar stock resultante cuando cambie la cantidad
     cantidadInput.addEventListener('input', function() {
@@ -422,6 +667,9 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Descuento change:', this.value);
         updatePrecioConDescuento();
     });
+
+    toggleSubinventarioSelector();
+    actualizarBuscadorLibros(true);
 
     // Inicializar el estado según old values
     const checkedRadio = document.querySelector('input[name="tipo_movimiento"]:checked');

@@ -98,6 +98,22 @@
                                     {{ $movimiento->tipo_movimiento === 'entrada' ? '+' : '-' }}{{ $movimiento->cantidad }} unidades
                                 </p>
                             </div>
+                            <div>
+                                <p class="text-xs text-gray-500">Origen</p>
+                                <p class="text-sm font-medium text-gray-900">
+                                    <i class="{{ $movimiento->subinventario_id ? 'fas fa-store' : 'fas fa-warehouse' }} text-gray-400"></i>
+                                    {{ $movimiento->getOrigenLabel() }}
+                                </p>
+                            </div>
+                            @if($movimiento->ajusteMasivo)
+                                <div>
+                                    <p class="text-xs text-gray-500">Ajuste Masivo</p>
+                                    <p class="text-sm font-medium text-gray-900">
+                                        <i class="fas fa-layer-group text-gray-400"></i>
+                                        {{ $movimiento->ajusteMasivo->folio }}
+                                    </p>
+                                </div>
+                            @endif
                             @if($movimiento->precio_unitario)
                                 <div>
                                     <p class="text-xs text-gray-500">Precio Unitario</p>

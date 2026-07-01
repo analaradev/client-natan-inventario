@@ -86,7 +86,7 @@
 
 <script>
 (function() {
-    const libros = @json($libros);
+    let libros = @json($libros);
     const nameId = '{{ $name }}';
     const searchInput = document.getElementById(nameId + '_search');
     const dropdown = document.getElementById(nameId + '_dropdown');
@@ -163,6 +163,7 @@
 
         selectedLibro = libro;
         hiddenInput.value = libro.id;
+        hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
         
         selectedNombre.textContent = libro.nombre;
         selectedCodigo.textContent = 'Código: ' + (libro.codigo_barras || 'Sin código');
@@ -177,6 +178,7 @@
     function clearSelection() {
         selectedLibro = null;
         hiddenInput.value = '';
+        hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
         selectedDiv.classList.add('hidden');
         searchInput.value = '';
         clearBtn.classList.add('hidden');
@@ -226,6 +228,24 @@
         clearSelection();
         dropdown.classList.add('hidden');
         searchInput.focus();
+    });
+
+    window.addEventListener('libro-search-filter:update', (event) => {
+        if (!event.detail || event.detail.name !== nameId) {
+            return;
+        }
+
+        libros = Array.isArray(event.detail.libros) ? event.detail.libros : [];
+        clearSelection();
+        searchInput.placeholder = event.detail.placeholder || 'Buscar libro...';
+        dropdown.classList.add('hidden');
+
+        if (event.detail.selected) {
+            const selected = libros.find(libro => libro.id == event.detail.selected);
+            if (selected) {
+                selectLibro(selected);
+            }
+        }
     });
 
     // Cerrar dropdown al hacer click fuera

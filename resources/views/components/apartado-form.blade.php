@@ -16,6 +16,8 @@
 @php
     $oldLibros = old('libros', []);
     $libroCount = !empty($oldLibros) ? count($oldLibros) : ($apartado ? $apartado->detalles->count() : 0);
+    $subinventariosCollection = collect($subinventarios);
+    $soloSubinventarioId = $subinventariosCollection->count() === 1 ? $subinventariosCollection->first()?->id : null;
 @endphp
 
 <form action="{{ $action }}" method="POST" id="apartadoForm" data-libro-index="{{ $libroCount }}">
@@ -186,7 +188,7 @@
                 >
                     <option value="">Selecciona un subinventario</option>
                     @foreach($subinventarios as $subinventario)
-                        <option value="{{ $subinventario->id }}" {{ old('subinventario_id') == $subinventario->id ? 'selected' : '' }}>
+                        <option value="{{ $subinventario->id }}" {{ old('subinventario_id', $soloSubinventarioId) == $subinventario->id ? 'selected' : '' }}>
                             Subinventario #{{ $subinventario->id }} - {{ $subinventario->descripcion ?? 'Sin descripción' }} ({{ $subinventario->fecha_subinventario->format('d/m/Y') }}) - {{ $subinventario->libros->count() }} libros
                         </option>
                     @endforeach
@@ -472,6 +474,7 @@
                 subinventarioSelector.style.display = 'block';
                 if (subinventarioSelect) {
                     subinventarioSelect.required = true;
+                    seleccionarUnicoSubinventario(subinventarioSelect);
                 }
             }
         } else {
@@ -486,6 +489,17 @@
         
         // Actualizar lista de libros
         actualizarListaLibros();
+    }
+
+    function seleccionarUnicoSubinventario(subinventarioSelect) {
+        if (!subinventarioSelect || subinventarioSelect.value) {
+            return;
+        }
+
+        const opciones = Array.from(subinventarioSelect.options).filter(option => option.value);
+        if (opciones.length === 1) {
+            subinventarioSelect.value = opciones[0].value;
+        }
     }
     
     // Cargar libros según subinventario seleccionado

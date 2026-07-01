@@ -29,6 +29,9 @@
             $selectedCliente = \App\Models\Cliente::find($oldClienteId);
         }
     }
+
+    $subinventariosCollection = collect($subinventarios);
+    $soloSubinventarioId = $subinventariosCollection->count() === 1 ? $subinventariosCollection->first()?->id : null;
 @endphp
 
 <form action="{{ $action }}" method="POST" id="ventaForm" data-libro-index="{{ $libroCount }}" data-cliente-selected="{{ $selectedCliente ? json_encode(['nombre' => $selectedCliente->nombre, 'telefono' => $selectedCliente->telefono]) : '' }}">
@@ -200,7 +203,7 @@
                     <option value="">Selecciona un subinventario</option>
                     @foreach($subinventarios as $sub)
                         <option value="{{ $sub->id }}" 
-                            {{ old('subinventario_id') == $sub->id ? 'selected' : '' }}
+                            {{ old('subinventario_id', $soloSubinventarioId) == $sub->id ? 'selected' : '' }}
                             data-libros="{{ json_encode($sub->libros_data) }}">
                             SubInventario #{{ $sub->id }} - {{ $sub->descripcion ?? 'Sin descripción' }} 
                             ({{ $sub->fecha_subinventario->format('d/m/Y') }}) - {{ $sub->libros->count() }} libros

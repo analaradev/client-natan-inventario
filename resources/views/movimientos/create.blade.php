@@ -17,6 +17,7 @@
         <x-movimiento-form 
             :action="route('movimientos.store')"
             :libros="$libros"
+            :subinventarios="$subinventarios"
             submitText="Registrar Movimiento"
         />
     </x-card>

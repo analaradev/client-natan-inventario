@@ -14,6 +14,7 @@ window.toggleInventarioTipo = function() {
     if (tipoInventario === 'subinventario') {
         subinventarioSelector.style.display = 'block';
         subinventarioSelect.required = true;
+        seleccionarUnicoSubinventario(subinventarioSelect);
         
         // Deshabilitar botón de agregar libro hasta que se seleccione un subinventario
         if (addLibroBtn) {
@@ -25,6 +26,8 @@ window.toggleInventarioTipo = function() {
                 addLibroBtn.classList.remove('opacity-50', 'cursor-not-allowed');
             }
         }
+        
+        cargarLibrosSubinventario();
         
         // Limpiar libros al cambiar a subinventario
         if (typeof limpiarLibrosFormulario === 'function') {
@@ -47,6 +50,17 @@ window.toggleInventarioTipo = function() {
         }
     }
 };
+
+function seleccionarUnicoSubinventario(subinventarioSelect) {
+    if (!subinventarioSelect || subinventarioSelect.value) {
+        return;
+    }
+
+    const opciones = Array.from(subinventarioSelect.options).filter(option => option.value);
+    if (opciones.length === 1) {
+        subinventarioSelect.value = opciones[0].value;
+    }
+}
 
 /**
  * Cargar libros del subinventario seleccionado
