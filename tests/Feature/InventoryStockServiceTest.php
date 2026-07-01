@@ -594,6 +594,64 @@ class InventoryStockServiceTest extends TestCase
         $this->assertSame(4, $libro->fresh()->stock_subinventario);
     }
 
+    public function test_api_store_rejects_vendor_discount(): void
+    {
+        $libro = $this->book(stock: 10, subStock: 5);
+        $sub = $this->subinventory();
+        $sub->libros()->attach($libro->id, ['cantidad' => 5]);
+
+        $response = $this->postJson('/api/v1/ventas', [
+            'subinventario_id' => $sub->id,
+            'cod_congregante' => 'test-user',
+            'fecha_venta' => now()->toDateString(),
+            'tipo_pago' => 'contado',
+            'usuario' => 'test-user',
+            'descuento_global' => 10,
+            'libros' => [
+                ['libro_id' => $libro->id, 'cantidad' => 1]
+            ]
+        ]);
+
+        $response->assertStatus(403);
+        $response->assertJsonPath('message', 'Solo Admin Librería o Supervisor pueden aplicar descuentos.');
+
+        $this->assertDatabaseCount('ventas', 0);
+        $this->assertSame(5, $libro->fresh()->stock_subinventario);
+    }
+
+    public function test_api_store_apartado_rejects_vendor_discount(): void
+    {
+        $cliente = Cliente::create(['nombre' => 'Cliente descuento']);
+        $libro = $this->book(stock: 10, subStock: 5);
+        $sub = $this->subinventory();
+        $sub->libros()->attach($libro->id, ['cantidad' => 5]);
+
+        $response = $this->postJson('/api/v1/apartados', [
+            'tipo_inventario' => 'subinventario',
+            'subinventario_id' => $sub->id,
+            'cod_congregante' => 'test-user',
+            'cliente_id' => $cliente->id,
+            'fecha_apartado' => now()->toDateString(),
+            'enganche' => 0,
+            'metodo_pago' => 'no_especificado',
+            'usuario' => 'test-user',
+            'libros' => [
+                [
+                    'libro_id' => $libro->id,
+                    'cantidad' => 1,
+                    'precio_unitario' => $libro->precio,
+                    'descuento' => 10,
+                ]
+            ]
+        ]);
+
+        $response->assertStatus(403);
+        $response->assertJsonPath('message', 'Solo Admin Librería o Supervisor pueden aplicar descuentos.');
+
+        $this->assertDatabaseCount('apartados', 0);
+        $this->assertSame(5, $libro->fresh()->stock_subinventario);
+    }
+
     public function test_api_login_returns_cod_congregante_for_mobile_role(): void
     {
         \Illuminate\Support\Facades\Http::fake([
@@ -649,6 +707,37 @@ class InventoryStockServiceTest extends TestCase
 
         // Verificar descuento de stock correcto (10 - 1 = 9)
         $this->assertSame(9, $libro->fresh()->stock);
+    }
+
+    public function test_api_store_admin_allows_supervisor_to_sell_general_inventory_without_subinventory_id(): void
+    {
+        \Illuminate\Support\Facades\Http::fake([
+            'https://www.sistemasdevida.com/pan/rest2/index.php/app/roles/SUPERVISOR_TOKEN' => \Illuminate\Support\Facades\Http::response([
+                'roles' => [['ROL' => 'SUPERVISOR', 'ID' => 20]],
+            ]),
+        ]);
+
+        $libro = $this->book(stock: 10);
+
+        $response = $this->postJson('/api/v1/movil/admin/ventas', [
+            'tipo_inventario' => 'general',
+            'fecha_venta' => now()->toDateString(),
+            'tipo_pago' => 'contado',
+            'metodo_pago' => 'no_especificado',
+            'usuario' => 'supervisor-user',
+            'cod_congregante' => 'SUPERVISOR_TOKEN',
+            'libros' => [
+                ['libro_id' => $libro->id, 'cantidad' => 2],
+            ],
+        ]);
+
+        $response->assertStatus(201);
+        $response->assertJsonPath('success', true);
+
+        $venta = Venta::findOrFail($response->json('data.venta_id'));
+        $this->assertSame('general', $venta->tipo_inventario);
+        $this->assertNull($venta->subinventario_id);
+        $this->assertSame(8, $libro->fresh()->stock);
     }
 
     public function test_api_mis_libros_disponibles_filters_by_congregante(): void

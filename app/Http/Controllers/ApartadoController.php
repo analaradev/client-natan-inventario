@@ -789,6 +789,13 @@ class ApartadoController extends Controller
             $tipoInventario = $validated['tipo_inventario'] ?? 'subinventario';
             $esAdmin = $this->isAdminFromRequest($request);
 
+            if (!$esAdmin && $this->payloadHasDiscount($validated)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Solo Admin Librería o Supervisor pueden aplicar descuentos.'
+                ], 403);
+            }
+
             if ($tipoInventario === 'general' && !$esAdmin) {
                 return response()->json([
                     'success' => false,

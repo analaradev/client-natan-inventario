@@ -1068,6 +1068,14 @@ class VentaController extends Controller
             'libros.required' => 'Debes agregar al menos un libro',
             'libros.min' => 'Debes agregar al menos un libro',
         ]);
+
+        if (!$this->isAdminFromRequest($request) && $this->payloadHasDiscount($validated)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Solo Admin Librería o Supervisor pueden aplicar descuentos.'
+            ], 403);
+        }
+
         DB::beginTransaction();
         try {
             $codCongreganteValidado = $request->attributes->get('validated_cod_congregante', $validated['cod_congregante']);

@@ -85,6 +85,24 @@ trait HasRoleChecks
     }
 
     /**
+     * Revisa si la petición intenta aplicar descuento global o por libro.
+     */
+    protected function payloadHasDiscount(array $validated): bool
+    {
+        if ((float) ($validated['descuento_global'] ?? 0) > 0) {
+            return true;
+        }
+
+        foreach (($validated['libros'] ?? []) as $libro) {
+            if ((float) ($libro['descuento'] ?? 0) > 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Verifica si es un rol de inventario completo (Admin Librería o Supervisor).
      */
     protected function hasFullInventoryRole(string $roleName, $roleId): bool
