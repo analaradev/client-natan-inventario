@@ -584,6 +584,7 @@ class InventoryStockServiceTest extends TestCase
             'fecha_venta' => now()->toDateString(),
             'tipo_pago' => 'contado',
             'usuario' => 'test-user',
+            'cliente_referencia' => 'Cliente referencia',
             'libros' => [
                 ['libro_id' => $libro->id, 'cantidad' => 1]
             ]
@@ -592,6 +593,7 @@ class InventoryStockServiceTest extends TestCase
         $response->assertStatus(201);
         $response->assertJsonPath('success', true);
         $this->assertSame(4, $libro->fresh()->stock_subinventario);
+        $this->assertSame('Cliente referencia', Venta::firstOrFail()->cliente_referencia);
     }
 
     public function test_api_store_rejects_vendor_discount(): void
@@ -726,6 +728,7 @@ class InventoryStockServiceTest extends TestCase
             'metodo_pago' => 'no_especificado',
             'usuario' => 'supervisor-user',
             'cod_congregante' => 'SUPERVISOR_TOKEN',
+            'cliente_referencia' => 'Cliente supervisor',
             'libros' => [
                 ['libro_id' => $libro->id, 'cantidad' => 2],
             ],
@@ -737,6 +740,7 @@ class InventoryStockServiceTest extends TestCase
         $venta = Venta::findOrFail($response->json('data.venta_id'));
         $this->assertSame('general', $venta->tipo_inventario);
         $this->assertNull($venta->subinventario_id);
+        $this->assertSame('Cliente supervisor', $venta->cliente_referencia);
         $this->assertSame(8, $libro->fresh()->stock);
     }
 

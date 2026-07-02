@@ -13,6 +13,7 @@ class Venta extends Model
 
     protected $fillable = [
         'cliente_id',
+        'cliente_referencia',
         'apartado_id',
         'fecha_venta',
         'tipo_pago',
@@ -218,6 +219,7 @@ class Venta extends Model
     {
         return $query->where(function($q) use ($search) {
             $q->where('id', 'like', "%{$search}%")
+              ->orWhere('cliente_referencia', 'like', "%{$search}%")
               ->orWhereHas('cliente', function($q) use ($search) {
                   $q->where('nombre', 'like', "%{$search}%");
               });

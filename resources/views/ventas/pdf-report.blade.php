@@ -93,7 +93,7 @@
                     <tr>
                         <td>#{{ $venta->id }}</td>
                         <td>{{ $venta->fecha_venta->format('d/m/Y') }}</td>
-                        <td>{{ $venta->cliente?->nombre ?: 'Sin cliente' }}</td>
+                        <td>{{ $venta->cliente_referencia ?: ($venta->cliente?->nombre ?: 'Sin cliente') }}</td>
                         <td class="text-center">
                             @if($venta->tipo_inventario === 'subinventario' && $venta->subinventario)
                                 <span class="badge badge-info" style="font-size: 9px;">SubInv #{{ $venta->subinventario->id }}</span>
@@ -147,7 +147,7 @@
             @if($venta->movimientos->count() > 0)
                 <div style="margin-bottom: 20px; padding: 10px; background-color: {{ $venta->estado === 'cancelada' ? '#fee2e2' : '#f9f9f9' }}; border-left: 3px solid {{ $venta->estado === 'cancelada' ? '#ef4444' : '#3B82F6' }};">
                     <strong style="color: #1F2937;">Venta #{{ $venta->id }} - {{ $venta->fecha_venta->format('d/m/Y H:i') }}</strong> 
-                    | Cliente: {{ $venta->cliente?->nombre ?: 'Sin cliente' }}
+                    | Cliente: {{ $venta->cliente_referencia ?: ($venta->cliente?->nombre ?: 'Sin cliente') }}
                     | Total: <span style="color: {{ $venta->estado === 'cancelada' ? '#dc2626' : '#10B981' }}; font-weight: bold;">${{ number_format($venta->total, 2) }}</span>
                     @if($venta->estado === 'cancelada')
                         | <strong style="color: #DC2626;">(CANCELADA)</strong>

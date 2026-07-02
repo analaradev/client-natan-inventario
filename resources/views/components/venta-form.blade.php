@@ -228,6 +228,32 @@
             />
         </div>
 
+        <!-- Cliente de Referencia -->
+        <div class="lg:col-span-2">
+            <label for="cliente_referencia" class="block text-sm font-medium text-gray-700 mb-2">
+                Nombre del cliente (Referencia)
+            </label>
+            <div class="relative">
+                <span class="absolute left-3 top-2.5 text-gray-400">
+                    <i class="fas fa-user-tag"></i>
+                </span>
+                <input
+                    type="text"
+                    name="cliente_referencia"
+                    id="cliente_referencia"
+                    maxlength="255"
+                    value="{{ old('cliente_referencia', $venta?->cliente_referencia) }}"
+                    class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 @error('cliente_referencia') border-red-500 @enderror"
+                    placeholder="Ej. Juan Perez">
+            </div>
+            <p class="mt-1 text-sm text-gray-500">
+                <i class="fas fa-info-circle"></i> Texto libre para identificar a quien se le hizo la venta o descuento
+            </p>
+            @error('cliente_referencia')
+                <p class="mt-1 text-sm text-red-500">{{ $message }}</p>
+            @enderror
+        </div>
+
         <!-- Fecha de Venta -->
         <div>
             <label for="fecha_venta" class="block text-sm font-medium text-gray-700 mb-2">

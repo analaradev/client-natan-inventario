@@ -291,8 +291,13 @@
                     <x-data-table-cell>
                         <div class="text-sm">
                             <div class="font-medium text-gray-900">
-                                {{ $venta->cliente?->nombre ?: 'Sin cliente' }}
+                                {{ $venta->cliente_referencia ?: ($venta->cliente?->nombre ?: 'Sin cliente') }}
                             </div>
+                            @if($venta->cliente_referencia && $venta->cliente)
+                                <div class="text-gray-500 text-xs">
+                                    <i class="fas fa-user mr-1"></i>{{ $venta->cliente->nombre }}
+                                </div>
+                            @endif
                             @if($venta->cliente?->telefono)
                                 <div class="text-gray-500 text-xs">
                                     <i class="fas fa-phone mr-1"></i>{{ $venta->cliente->telefono }}

@@ -46,7 +46,7 @@
                     </div>
 
                     <div>
-                        <p class="text-sm text-gray-600 mb-1">Cliente</p>
+                        <p class="text-sm text-gray-600 mb-1">Cliente / Referencia</p>
                         @if($venta->cliente)
                             <p class="text-lg font-semibold text-gray-800">
                                 <i class="fas fa-user text-primary-600 mr-2"></i>
@@ -58,6 +58,18 @@
                                     {{ $venta->cliente->telefono }}
                                 </p>
                             @endif
+                            @if($venta->cliente_referencia)
+                                <p class="text-sm text-gray-600 mt-1">
+                                    <i class="fas fa-user-tag mr-1"></i>
+                                    Referencia: {{ $venta->cliente_referencia }}
+                                </p>
+                            @endif
+                        @elseif($venta->cliente_referencia)
+                            <p class="text-lg font-semibold text-gray-800">
+                                <i class="fas fa-user-tag text-primary-600 mr-2"></i>
+                                {{ $venta->cliente_referencia }}
+                            </p>
+                            <p class="text-sm text-gray-500 mt-1">Referencia de texto</p>
                         @else
                             <p class="text-lg font-semibold text-gray-400 italic">
                                 Sin cliente asignado

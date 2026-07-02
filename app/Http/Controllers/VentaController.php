@@ -256,6 +256,7 @@ class VentaController extends Controller
                 'tipo_inventario' => 'required|in:general,subinventario',
                 'subinventario_id' => 'nullable|required_if:tipo_inventario,subinventario|exists:subinventarios,id',
                 'cliente_id' => 'nullable|exists:clientes,id',
+                'cliente_referencia' => 'nullable|string|max:255',
                 'fecha_venta' => 'required|date',
                 'tipo_pago' => 'nullable|in:contado,credito,mixto',
                 'metodo_pago' => 'nullable|in:efectivo,tarjeta,transferencia,no_especificado',
@@ -310,6 +311,7 @@ class VentaController extends Controller
             // Crear la venta
             $venta = Venta::create([
                 'cliente_id' => $validated['cliente_id'],
+                'cliente_referencia' => $this->nullableTrim($validated['cliente_referencia'] ?? null),
                 'fecha_venta' => $validated['fecha_venta'],
                 'tipo_pago' => 'contado',
                 'metodo_pago' => $validated['metodo_pago'] ?? 'no_especificado',
@@ -455,6 +457,7 @@ class VentaController extends Controller
 
         $validated = $request->validate([
             'cliente_id' => 'nullable|exists:clientes,id',
+            'cliente_referencia' => 'nullable|string|max:255',
             'fecha_venta' => 'required|date',
             'tipo_pago' => 'nullable|in:contado,credito,mixto',
             'metodo_pago' => 'nullable|in:efectivo,tarjeta,transferencia,no_especificado',
@@ -557,6 +560,7 @@ class VentaController extends Controller
             // Actualizar la venta
             $venta->update([
                 'cliente_id' => $validated['cliente_id'],
+                'cliente_referencia' => $this->nullableTrim($validated['cliente_referencia'] ?? null),
                 'fecha_venta' => $validated['fecha_venta'],
                 'tipo_pago' => 'contado',
                 'metodo_pago' => $validated['metodo_pago'] ?? $venta->metodo_pago ?? 'no_especificado',
@@ -763,7 +767,7 @@ class VentaController extends Controller
             $dataSummary[] = [
                 $venta->id,
                 $venta->fecha_venta->format('d/m/Y H:i'),
-                $venta->cliente?->nombre ?: 'Sin cliente',
+                $venta->cliente_referencia ?: ($venta->cliente?->nombre ?: 'Sin cliente'),
                 $origen,
                 $apartado,
                 $venta->movimientos->count(),
@@ -800,7 +804,7 @@ class VentaController extends Controller
                 $dataDetail[] = [
                     $venta->id,
                     $venta->fecha_venta->format('d/m/Y H:i'),
-                    $venta->cliente?->nombre ?: 'Sin cliente',
+                    $venta->cliente_referencia ?: ($venta->cliente?->nombre ?: 'Sin cliente'),
                     $movimiento->libro?->nombre ?: 'Producto eliminado',
                     $movimiento->cantidad,
                     '$' . number_format($movimiento->precio_unitario, 2),
@@ -1044,6 +1048,7 @@ class VentaController extends Controller
             'subinventario_id' => 'required|exists:subinventarios,id',
             'cod_congregante' => 'required|string', // Para validar acceso
             'cliente_id' => 'nullable|exists:clientes,id',
+            'cliente_referencia' => 'nullable|string|max:255',
             'fecha_venta' => 'required|date',
             'tipo_pago' => 'nullable|in:contado,credito,mixto',
             'metodo_pago' => 'nullable|in:efectivo,tarjeta,transferencia,no_especificado',
@@ -1095,6 +1100,7 @@ class VentaController extends Controller
             // 6. CREAR LA VENTA
             $venta = Venta::create([
                 'cliente_id' => $validated['cliente_id'] ?? null,
+                'cliente_referencia' => $this->nullableTrim($validated['cliente_referencia'] ?? null),
                 'fecha_venta' => $validated['fecha_venta'],
                 'tipo_pago' => 'contado',
                 'metodo_pago' => $validated['metodo_pago'] ?? 'no_especificado',
@@ -1334,6 +1340,7 @@ class VentaController extends Controller
             'tipo_inventario' => 'required|in:general,subinventario',
             'subinventario_id' => 'nullable|required_if:tipo_inventario,subinventario|exists:subinventarios,id',
             'cliente_id' => 'nullable|exists:clientes,id',
+            'cliente_referencia' => 'nullable|string|max:255',
             'fecha_venta' => 'required|date',
             'tipo_pago' => 'nullable|in:contado,credito,mixto',
             'metodo_pago' => 'nullable|in:efectivo,tarjeta,transferencia,no_especificado',
@@ -1379,6 +1386,7 @@ class VentaController extends Controller
 
             $venta = Venta::create([
                 'cliente_id' => $validated['cliente_id'] ?? null,
+                'cliente_referencia' => $this->nullableTrim($validated['cliente_referencia'] ?? null),
                 'fecha_venta' => $validated['fecha_venta'],
                 'tipo_pago' => 'contado',
                 'metodo_pago' => $validated['metodo_pago'] ?? 'no_especificado',
@@ -1594,6 +1602,13 @@ class VentaController extends Controller
             'total_libros' => $stats->total_libros ?? 0,
             'total_unidades' => $stats->total_unidades ?? 0
         ];
+    }
+
+    private function nullableTrim(?string $value): ?string
+    {
+        $value = trim((string) $value);
+
+        return $value === '' ? null : $value;
     }
 
 }
