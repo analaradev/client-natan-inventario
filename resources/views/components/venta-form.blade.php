@@ -228,10 +228,10 @@
             />
         </div>
 
-        <!-- Cliente de Referencia -->
+        <!-- Nombre opcional del cliente -->
         <div class="lg:col-span-2">
             <label for="cliente_referencia" class="block text-sm font-medium text-gray-700 mb-2">
-                Nombre del cliente (Referencia)
+                Nombre del cliente (Opcional)
             </label>
             <div class="relative">
                 <span class="absolute left-3 top-2.5 text-gray-400">
